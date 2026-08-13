@@ -79,6 +79,24 @@ namespace anin.scm
                 app.UseDeveloperExceptionPage();
             }
 
+            // ----- [AMBIENTE] file server -----------------------------------
+            // Publica la carpeta de archivos bajo /files para que el navegador
+            // pueda abrir los PDF que genera el sistema. La ruta es la misma
+            // que appSettings:rutafile, y /files la misma que appSettings:urlfile.
+            //
+            // EN PRODUCCION Y QA ESTE BLOQUE SE COMENTA: alli la carpeta la
+            // publica IIS, y dejarlo activo haria que el servicio sirviera
+            // archivos por una via que no esta bajo las reglas del servidor web.
+            // PhysicalFileProvider lanza si la carpeta no existe, y eso impide
+            // arrancar el servicio en una maquina recien clonada. Se crea.
+            System.IO.Directory.CreateDirectory(@"D:\file");
+
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(@"D:\file"),
+                RequestPath = "/files"
+            });
+
             app.UseRouting();
 
             app.UseCors(x => x

@@ -78,5 +78,62 @@ namespace anin.scm.Controllers
         }
 
         #endregion
+
+        #region "Documentos y firmas"
+
+        /// <summary>
+        /// Documentos del expediente con su version vigente: que hay, en que
+        /// estado, con que URL se abre el PDF y si el rol que mira puede firmar.
+        ///
+        /// Entrada: { "IdExpediente":"..." }
+        /// </summary>
+        [HttpGet]
+        public IActionResult listarDocumento(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paListarDocumento", ipInput);
+        }
+
+        /// <summary>
+        /// Registra el documento que el frontend genero y subio al file server.
+        ///
+        /// Entrada: { "IdExpediente":"...", "CodigoTipoDocumento":"...",
+        ///            "GeneradoDocumento":"URL", "NombreDocumento":"...",
+        ///            "ArchivoHash":"...", "Payload":{ } }
+        ///
+        /// El orden importa: primero se sube el PDF por api/general/SubirArchivo
+        /// y despues se registra aqui la URL que devolvio. Un documento sin
+        /// archivo no se registra.
+        ///
+        /// Si la version vigente ya estaba firmada, la rutina crea una version
+        /// nueva y anula la anterior: es la invalidacion de firma de CMN-18.
+        /// </summary>
+        [HttpPost]
+        public IActionResult registrarDocumento(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paRegistrarDocumento", ipInput);
+        }
+
+        /// <summary>
+        /// Firma la version vigente del documento.
+        ///
+        /// Entrada: { "IdExpediente":"...", "CodigoTipoDocumento":"...",
+        ///            "ArchivoHash":"...", "GeneradoDocumento":"..." }
+        ///
+        /// Quien puede firmar cada documento lo dice sigcm.TipoDocumentoFirma,
+        /// que es dato sembrado. Este endpoint es tambien el punto de entrada
+        /// del firmador institucional cuando se integre: recibira el PDF ya
+        /// firmado y su huella, y nada mas del sistema cambiara.
+        ///
+        /// Firmar NO mueve el expediente. La accion del flujo que corresponde
+        /// —CMN_FIRMAR_A3, REQ_FIRMAR_AU— se ejecuta despues por
+        /// ejecutarTransicion, que comprueba que el documento este firmado.
+        /// </summary>
+        [HttpPost]
+        public IActionResult firmarDocumento(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paFirmarDocumento", ipInput);
+        }
+
+        #endregion
     }
 }

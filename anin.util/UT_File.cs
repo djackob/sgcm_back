@@ -49,6 +49,99 @@ namespace anin.util
             return list;
         }
 
+        /// <summary>
+        /// Guarda un archivo en el file server local y devuelve su URL publica.
+        ///
+        /// DIFERENCIA CON LAS OTRAS SOBRECARGAS
+        /// SubirArchivo(HttpContext) publica hacia un servicio de archivos
+        /// externo (url_servicio + cod_file). Esta guarda en el file server
+        /// propio, el de appSettings:rutafile, que es como opera el SIGCM.
+        ///
+        /// EL NOMBRE SE REEMPLAZA, SIEMPRE
+        /// El archivo se guarda con un nombre generado y nunca con el que trae
+        /// el usuario. Dos motivos: dos personas suben "Anexo 3.pdf" el mismo
+        /// dia y uno pisaria al otro, y un nombre venido del navegador puede
+        /// contener separadores de ruta y escapar de la carpeta. El nombre
+        /// original viaja aparte, en documento_original, para mostrarlo.
+        ///
+        /// Respuesta, en el formato que espera app-input-archivos:
+        ///   { "estado":1, "mensaje":"...",
+        ///     "documento_original":"Anexo 3.pdf",
+        ///     "documento_sistema":"https://.../files/cmn/20260813...pdf" }
+        /// </summary>
+        /// <param name="stArchivo">Contenido del archivo.</param>
+        /// <param name="strNombreOriginal">Nombre con el que llego; solo se usa para la extension y la respuesta.</param>
+        /// <param name="strCarpeta">Subcarpeta bajo rutafile: "cmn", "requerimiento".</param>
+        public static string SubirArchivo(Stream stArchivo, string strNombreOriginal, string strCarpeta)
+        {
+            string strFileNew = string.Empty;
+
+            try
+            {
+                string? strRutaFile = UT_Configuracion.AppSettings("appSettings", "rutafile");
+                string? strUrlFile = UT_Configuracion.AppSettings("appSettings", "urlfile");
+
+                if (string.IsNullOrEmpty(strRutaFile) || string.IsNullOrEmpty(strUrlFile))
+                {
+                    return Respuesta(0, "No estan configurados appSettings:rutafile y appSettings:urlfile.",
+                                     strNombreOriginal, string.Empty);
+                }
+
+                // Solo el nombre del archivo: descarta cualquier ruta que venga
+                // en el nombre original.
+                strNombreOriginal = Path.GetFileName(strNombreOriginal ?? string.Empty);
+
+                // La carpeta la fija el frontend, asi que se limpia: sin unidades,
+                // sin rutas absolutas y sin subir de nivel con "..".
+                strCarpeta = (strCarpeta ?? string.Empty).Replace("\\", "/").Trim('/');
+                if (strCarpeta.Contains("..") || Path.IsPathRooted(strCarpeta))
+                {
+                    return Respuesta(0, "La carpeta indicada no es valida.", strNombreOriginal, string.Empty);
+                }
+
+                string strExtension = Path.GetExtension(strNombreOriginal).ToLower();
+                DateTime dtHoy = DateTime.Now;
+                strFileNew = string.Concat(
+                    dtHoy.ToString("yyyyMMddHHmmssfff"),
+                    Guid.NewGuid().ToString("N").Substring(0, 8),
+                    strExtension);
+
+                string strCarpetaFisica = Path.Combine(strRutaFile, strCarpeta.Replace("/", "\\"));
+                Directory.CreateDirectory(strCarpetaFisica);
+
+                string strRutaCompleta = Path.Combine(strCarpetaFisica, strFileNew);
+
+                using (FileStream fsDestino = new FileStream(strRutaCompleta, FileMode.Create, FileAccess.Write))
+                {
+                    stArchivo.CopyTo(fsDestino);
+                }
+
+                string strUrl = string.Concat(strUrlFile.TrimEnd('/'), "/",
+                                              string.IsNullOrEmpty(strCarpeta) ? "" : strCarpeta + "/",
+                                              strFileNew);
+
+                return Respuesta(1, "Se subio el archivo satisfactoriamente.", strNombreOriginal, strUrl);
+            }
+            catch (Exception ex)
+            {
+                return Respuesta(0, ex.Message, strNombreOriginal ?? string.Empty, string.Empty);
+            }
+        }
+
+        /// <summary>
+        /// Sobre de respuesta del manejo de archivos. Los textos se serializan:
+        /// un nombre de archivo con comillas romperia el JSON si se concatenara.
+        /// </summary>
+        private static string Respuesta(int intEstado, string strMensaje,
+                                        string strOriginal, string strSistema)
+        {
+            return string.Concat(
+                "{\"estado\":", intEstado,
+                ",\"mensaje\":", System.Text.Json.JsonSerializer.Serialize(strMensaje),
+                ",\"documento_original\":", System.Text.Json.JsonSerializer.Serialize(strOriginal),
+                ",\"documento_sistema\":", System.Text.Json.JsonSerializer.Serialize(strSistema), "}");
+        }
+
         public static string DescargarArchivo(string strarchivo)
         {
             string list = string.Empty;
