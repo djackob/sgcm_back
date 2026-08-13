@@ -1,0 +1,29 @@
+﻿# Visual Studio
+.vs/
+*.user
+*.suo
+*.log
+
+# Build results
+bin/
+obj/
+Debug/
+Release/
+
+# Rider, ReSharper, etc.
+*.ReSharper.*
+*.DotSettings.user
+
+# NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# VS Code
+.vscode/
+
+# Otros archivos temporales
+*.cache
+*.db
