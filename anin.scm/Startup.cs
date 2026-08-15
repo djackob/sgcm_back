@@ -89,11 +89,13 @@ namespace anin.scm
             // archivos por una via que no esta bajo las reglas del servidor web.
             // PhysicalFileProvider lanza si la carpeta no existe, y eso impide
             // arrancar el servicio en una maquina recien clonada. Se crea.
-            System.IO.Directory.CreateDirectory(@"D:\file");
+            var rutaFile = (Configuration["appSettings:rutafile"] ?? @"C:\jack\prueba\hub\files\")
+                .TrimEnd('\\', '/');
+            System.IO.Directory.CreateDirectory(rutaFile);
 
             app.UseStaticFiles(new StaticFileOptions
             {
-                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(@"D:\file"),
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(rutaFile),
                 RequestPath = "/files"
             });
 
