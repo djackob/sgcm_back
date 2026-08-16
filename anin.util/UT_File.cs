@@ -87,6 +87,13 @@ namespace anin.util
                                      strNombreOriginal, string.Empty);
                 }
 
+                if (strRutaFile.StartsWith("\\") && !strRutaFile.StartsWith("\\\\"))
+                {
+                    return Respuesta(0, "appSettings:rutafile parece un recurso compartido con una sola barra " +
+                                        "inicial (" + strRutaFile + "). En el JSON las dos barras se escriben " +
+                                        "con cuatro.", strNombreOriginal, string.Empty);
+                }
+
                 // Solo el nombre del archivo: descarta cualquier ruta que venga
                 // en el nombre original.
                 strNombreOriginal = Path.GetFileName(strNombreOriginal ?? string.Empty);
