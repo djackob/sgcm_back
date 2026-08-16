@@ -84,20 +84,34 @@ namespace anin.scm
             // pueda abrir los PDF que genera el sistema. La ruta es la misma
             // que appSettings:rutafile, y /files la misma que appSettings:urlfile.
             //
-            // EN PRODUCCION Y QA ESTE BLOQUE SE COMENTA: alli la carpeta la
-            // publica IIS, y dejarlo activo haria que el servicio sirviera
-            // archivos por una via que no esta bajo las reglas del servidor web.
-            // PhysicalFileProvider lanza si la carpeta no existe, y eso impide
-            // arrancar el servicio en una maquina recien clonada. Se crea.
+            // Solo aplica cuando rutafile es una carpeta de ESTA maquina. Si
+            // apunta a un recurso compartido —el de vasg, por ejemplo— quien
+            // publica es IIS, y montarlo tambien aqui serviria los archivos por
+            // una via que no esta bajo las reglas de ese servidor.
+            //
+            // Nada de esto puede impedir que el servicio arranque: si la carpeta
+            // no existe o la red no responde, el sistema sigue en pie y lo unico
+            // que falla es subir archivos, con su propio mensaje.
             var rutaFile = (Configuration["appSettings:rutafile"] ?? @"C:\jack\prueba\hub\files\")
                 .TrimEnd('\\', '/');
-            System.IO.Directory.CreateDirectory(rutaFile);
 
-            app.UseStaticFiles(new StaticFileOptions
+            if (!rutaFile.StartsWith(@"\\"))
             {
-                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(rutaFile),
-                RequestPath = "/files"
-            });
+                try
+                {
+                    System.IO.Directory.CreateDirectory(rutaFile);
+
+                    app.UseStaticFiles(new StaticFileOptions
+                    {
+                        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(rutaFile),
+                        RequestPath = "/files"
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"No se pudo publicar el file server local en '{rutaFile}': {ex.Message}");
+                }
+            }
 
             app.UseRouting();
 

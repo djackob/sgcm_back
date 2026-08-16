@@ -24,9 +24,26 @@ namespace anin.scm.Controllers
     public class GeneralController : ControllerBase
     {
         /// <summary>
+        /// Adonde va el archivo. Con appSettings:file_servicio_externo en "true"
+        /// se publica en el servicio de archivos de la ANIN (url_servicio +
+        /// cod_file); con cualquier otro valor se escribe en el file server
+        /// propio (rutafile) y lo publica este mismo servicio bajo urlfile.
+        ///
+        /// Se comprueba en cada llamada y no al arrancar, para que cambiar de
+        /// destino no dependa de reiniciar.
+        /// </summary>
+        private static bool ServicioExternoHabilitado()
+        {
+            return string.Equals(UT_Configuracion.AppSettings("appSettings", "file_servicio_externo"),
+                                 "true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Sube un archivo al file server, dentro de la subcarpeta indicada.
         ///
-        /// Entrada: multipart con el archivo y strcarpeta ("cmn", "requerimiento").
+        /// Entrada: multipart con el archivo y strcarpeta ("CMN", "requerimiento").
+        /// La subcarpeta viaja tal cual al nombre publico, asi que se escribe
+        /// como debe verse en la URL.
         /// Salida:  { "estado":1, "documento_original":"...", "documento_sistema":"URL" }
         ///
         /// Es el endpoint que consume app-input-archivos a traves de
@@ -51,10 +68,22 @@ namespace anin.scm.Controllers
                         "\"documento_original\":\"\",\"documento_sistema\":\"\"}"));
                 }
 
-                string strFileName = HttpContext.Request.Form.Files[0].FileName;
-                Stream sfile = HttpContext.Request.Form.Files[0].OpenReadStream();
+                string strPayload;
 
-                var strResultado = JsonDocument.Parse(UT_File.SubirArchivo(sfile, strFileName, strcarpeta));
+                if (ServicioExternoHabilitado())
+                {
+                    // El servicio de la ANIN organiza por cod_file, asi que
+                    // strcarpeta no viaja: alli la carpeta es DESARROLLO/SCM.
+                    strPayload = UT_File.SubirArchivo(HttpContext);
+                }
+                else
+                {
+                    string strFileName = HttpContext.Request.Form.Files[0].FileName;
+                    Stream sfile = HttpContext.Request.Form.Files[0].OpenReadStream();
+                    strPayload = UT_File.SubirArchivo(sfile, strFileName, strcarpeta);
+                }
+
+                var strResultado = JsonDocument.Parse(strPayload);
                 if (strResultado != null)
                 {
                     return Ok(strResultado);
