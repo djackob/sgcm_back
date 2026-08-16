@@ -115,6 +115,7 @@ namespace anin.scm.Controllers
         public IActionResult DescargarArchivo(string strarchivo)
         {
             string? strUrlFile = UT_Configuracion.AppSettings("appSettings", "urlfile");
+            strUrlFile = strUrlFile + UT_Configuracion.AppSettings("appSettings", "cod_file");
 
             if (string.IsNullOrEmpty(strUrlFile) || string.IsNullOrWhiteSpace(strarchivo))
             {
