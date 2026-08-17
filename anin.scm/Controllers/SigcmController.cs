@@ -97,12 +97,12 @@ namespace anin.scm.Controllers
         /// Registra el documento que el frontend genero y subio al file server.
         ///
         /// Entrada: { "IdExpediente":"...", "CodigoTipoDocumento":"...",
-        ///            "GeneradoDocumento":"URL", "NombreDocumento":"...",
+        ///            "GeneradoDocumento":"ID de documento_sistema", "NombreDocumento":"...",
         ///            "ArchivoHash":"...", "Payload":{ } }
         ///
         /// El orden importa: primero se sube el PDF por api/general/SubirArchivo
-        /// y despues se registra aqui la URL que devolvio. Un documento sin
-        /// archivo no se registra.
+        /// y despues se registra aqui el documento_sistema que devolvio. Un
+        /// documento sin archivo no se registra.
         ///
         /// Si la version vigente ya estaba firmada, la rutina crea una version
         /// nueva y anula la anterior: es la invalidacion de firma de CMN-18.

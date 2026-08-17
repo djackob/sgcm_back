@@ -17,11 +17,14 @@ namespace anin.scm.Controllers
         [HttpPost]
         [RequestFormLimits(ValueCountLimit = int.MaxValue, MultipartBodyLengthLimit = long.MaxValue)]
         [DisableRequestSizeLimit]
-        public IActionResult SubirArchivo(string strcarpeta)
+        public IActionResult SubirArchivo(IFormFile? uploadFile, string strcarpeta)
         {
             try
             {
-                if (HttpContext.Request.Form.Files.Count == 0)
+                IFormFile? archivo = uploadFile
+                    ?? (HttpContext.Request.Form.Files.Count > 0 ? HttpContext.Request.Form.Files[0] : null);
+
+                if (archivo == null)
                 {
                     return Ok(JsonDocument.Parse(
                         "{\"estado\":0,\"mensaje\":\"No se recibio ningun archivo.\"," +
@@ -32,15 +35,12 @@ namespace anin.scm.Controllers
 
                 if (ServicioExternoHabilitado())
                 {
-                    // El servicio de la ANIN organiza por cod_file, asi que
-                    // strcarpeta no viaja: alli la carpeta es DESARROLLO/SCM.
                     strPayload = UT_File.SubirArchivo(HttpContext);
                 }
                 else
                 {
-                    string strFileName = HttpContext.Request.Form.Files[0].FileName;
-                    Stream sfile = HttpContext.Request.Form.Files[0].OpenReadStream();
-                    strPayload = UT_File.SubirArchivo(sfile, strFileName, strcarpeta);
+                    Stream sfile = archivo.OpenReadStream();
+                    strPayload = UT_File.SubirArchivo(sfile, archivo.FileName, strcarpeta);
                 }
 
                 var strResultado = JsonDocument.Parse(strPayload);
@@ -53,36 +53,46 @@ namespace anin.scm.Controllers
                     return NotFound();
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return NotFound();
+                return Ok(JsonDocument.Parse(
+                    "{\"estado\":0,\"mensaje\":" + JsonSerializer.Serialize(ex.Message) +
+                    ",\"documento_original\":\"\",\"documento_sistema\":\"\"}"));
             }
         }
 
         [HttpGet]
         public IActionResult DescargarArchivo(string strarchivo, string? strcarpeta = null)
         {
-            string? strUrlFile = UT_Configuracion.AppSettings("appSettings", "urlfile");
-
-            if (string.IsNullOrEmpty(strUrlFile) || string.IsNullOrWhiteSpace(strarchivo))
+            string strId = UT_File.IdDocumentoSistema(strarchivo);
+            if (string.IsNullOrWhiteSpace(strId))
             {
                 return Ok(JsonDocument.Parse(
-                    "{\"estado\":0,\"mensaje\":\"No se pudo resolver la ruta del archivo.\"}"));
+                    "{\"estado\":0,\"mensaje\":\"No se indico el archivo a descargar.\"}"));
             }
 
-            // Lo que llega es un nombre guardado por el propio sistema, pero se
-            // limpia igual: nunca se construye una ruta con texto del cliente
-            // sin quitarle los saltos de carpeta.
-            string strRelativa = strarchivo.Replace("\\", "/").Replace("..", "").TrimStart('/');
-            string strSubcarpeta = (strcarpeta ?? string.Empty)
-                .Replace("\\", "/").Replace("..", "").Trim('/');
+            if (UT_File.TryRutaFisica(strId, strcarpeta, out string strRutaFisica))
+            {
+                var tipos = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+                if (!tipos.TryGetContentType(strId, out string? strTipo) || string.IsNullOrEmpty(strTipo))
+                {
+                    strTipo = "application/octet-stream";
+                }
 
-            string strUrl = string.Concat(strUrlFile.TrimEnd('/'), "/",
-                                          strSubcarpeta.Length == 0 ? "" : strSubcarpeta + "/",
-                                          strRelativa);
+                return PhysicalFile(strRutaFisica, strTipo);
+            }
+
+            if (ServicioExternoHabilitado())
+            {
+                var strResultado = JsonDocument.Parse(UT_File.DescargarArchivo(strId));
+                if (strResultado != null)
+                {
+                    return Ok(strResultado);
+                }
+            }
 
             return Ok(JsonDocument.Parse(
-                "{\"estado\":1,\"mensaje\":" + JsonSerializer.Serialize(strUrl) + "}"));
+                "{\"estado\":0,\"mensaje\":\"No se encontro el archivo indicado.\"}"));
         }
     }
 }

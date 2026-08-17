@@ -67,7 +67,11 @@ namespace anin.util
         /// Respuesta, en el formato que espera app-input-archivos:
         ///   { "estado":1, "mensaje":"...",
         ///     "documento_original":"Anexo 3.pdf",
-        ///     "documento_sistema":"https://.../files/cmn/20260813...pdf" }
+        ///     "documento_sistema":"20260813...pdf" }
+        ///
+        /// documento_sistema es el IDENTIFICADOR del archivo en el file server,
+        /// no una URL. Las tablas lo guardan asi y la descarga se hace con
+        /// api/General/DescargarArchivo?strarchivo=ese_id.
         /// </summary>
         /// <param name="stArchivo">Contenido del archivo.</param>
         /// <param name="strNombreOriginal">Nombre con el que llego; solo se usa para la extension y la respuesta.</param>
@@ -123,11 +127,7 @@ namespace anin.util
                     stArchivo.CopyTo(fsDestino);
                 }
 
-                string strUrl = string.Concat(strUrlFile.TrimEnd('/'), "/",
-                                              string.IsNullOrEmpty(strCarpeta) ? "" : strCarpeta + "/",
-                                              strFileNew);
-
-                return Respuesta(1, "Se subio el archivo satisfactoriamente.", strNombreOriginal, strUrl);
+                return Respuesta(1, "Se subio el archivo satisfactoriamente.", strNombreOriginal, strFileNew);
             }
             catch (Exception ex)
             {
@@ -147,6 +147,84 @@ namespace anin.util
                 ",\"mensaje\":", System.Text.Json.JsonSerializer.Serialize(strMensaje),
                 ",\"documento_original\":", System.Text.Json.JsonSerializer.Serialize(strOriginal),
                 ",\"documento_sistema\":", System.Text.Json.JsonSerializer.Serialize(strSistema), "}");
+        }
+
+        /// <summary>
+        /// Extrae el identificador (nombre de archivo) desde documento_sistema.
+        /// Acepta el id puro o una URL antigua y se queda con el ultimo segmento.
+        /// </summary>
+        public static string IdDocumentoSistema(string? valor)
+        {
+            if (string.IsNullOrWhiteSpace(valor))
+            {
+                return string.Empty;
+            }
+
+            string str = valor.Trim().Replace('\\', '/');
+            int intQuery = str.IndexOf('?');
+            if (intQuery >= 0)
+            {
+                str = str.Substring(0, intQuery);
+            }
+
+            return Path.GetFileName(str);
+        }
+
+        /// <summary>
+        /// Localiza el archivo fisico a partir del id guardado en las tablas.
+        /// Busca en la subcarpeta indicada, en la raiz de rutafile y, si hace
+        /// falta, un nivel mas abajo.
+        /// </summary>
+        public static bool TryRutaFisica(string strarchivo, string? strcarpeta, out string strRutaFisica)
+        {
+            strRutaFisica = string.Empty;
+            string strId = IdDocumentoSistema(strarchivo);
+            if (string.IsNullOrEmpty(strId) || strId.Contains(".."))
+            {
+                return false;
+            }
+
+            string? strRutaFile = UT_Configuracion.AppSettings("appSettings", "rutafile");
+            if (string.IsNullOrEmpty(strRutaFile))
+            {
+                return false;
+            }
+
+            string strSub = (strcarpeta ?? string.Empty).Replace("\\", "/").Replace("..", "").Trim('/');
+            var candidatos = new List<string>();
+            if (!string.IsNullOrEmpty(strSub))
+            {
+                candidatos.Add(Path.Combine(strRutaFile, strSub.Replace("/", "\\"), strId));
+            }
+            candidatos.Add(Path.Combine(strRutaFile, strId));
+
+            foreach (string strCandidato in candidatos)
+            {
+                if (File.Exists(strCandidato))
+                {
+                    strRutaFisica = strCandidato;
+                    return true;
+                }
+            }
+
+            try
+            {
+                if (Directory.Exists(strRutaFile))
+                {
+                    string[] encontrados = Directory.GetFiles(strRutaFile, strId, SearchOption.AllDirectories);
+                    if (encontrados.Length > 0)
+                    {
+                        strRutaFisica = encontrados[0];
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                /* Un recurso de red puede no dejar enumerar; se sigue con no encontrado. */
+            }
+
+            return false;
         }
 
         public static string DescargarArchivo(string strarchivo)
