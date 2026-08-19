@@ -13,7 +13,12 @@ namespace anin.util
         {
             ConfigurationBuilder cbConfiguracion = new ConfigurationBuilder();
             string strRuta = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
+            string strRutaLocal = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.Local.json");
             cbConfiguracion.AddJsonFile(strRuta, false);
+            // Configuracion privada del equipo. Es opcional y se carga despues
+            // para que pueda reemplazar rutas locales sin modificar ni subir
+            // appsettings.json.
+            cbConfiguracion.AddJsonFile(strRutaLocal, true);
 
             var bRoot = cbConfiguracion.Build();
             return bRoot.GetSection(strNodo).GetSection(strKey).Value;

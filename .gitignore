@@ -11,3 +11,7 @@ Release/
 *.user
 *.suo
 *.log
+
+# Configuracion y archivos exclusivos de cada equipo
+appsettings.Local.json
+.local-files/

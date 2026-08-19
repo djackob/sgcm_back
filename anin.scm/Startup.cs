@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using anin.scm.Services;
 
 namespace anin.scm
 {
@@ -16,6 +17,22 @@ namespace anin.scm
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
+
+            services.AddOptions<IntegracionSigaOptions>()
+                .Bind(Configuration.GetSection(IntegracionSigaOptions.Seccion))
+                .Validate(opciones => !opciones.Habilitado
+                                      || opciones.Modo.Equals("simulacion", StringComparison.OrdinalIgnoreCase)
+                                      || opciones.Modo.Equals("real", StringComparison.OrdinalIgnoreCase),
+                          "IntegracionSiga:Modo debe ser 'simulacion' o 'real'.")
+                .Validate(opciones => opciones.IntervaloSegundos >= 5,
+                          "IntegracionSiga:IntervaloSegundos debe ser al menos 5.")
+                .Validate(opciones => opciones.Limite is >= 1 and <= 50,
+                          "IntegracionSiga:Limite debe estar entre 1 y 50.")
+                .Validate(opciones => opciones.TimeoutSegundos >= 15,
+                          "IntegracionSiga:TimeoutSegundos debe ser al menos 15.")
+                .ValidateOnStart();
+
+            services.AddHostedService<IntegracionSigaWorker>();
 
             //services.AddHttpClient();
 
