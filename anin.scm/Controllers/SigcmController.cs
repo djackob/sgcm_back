@@ -56,10 +56,17 @@ namespace anin.scm.Controllers
         ///
         /// Entrada: { "IdExpediente":"...", "CodigoTransicion":"CMN_ENVIAR_OA",
         ///            "Version":3, "Comentario":"...", "IdUnidadDestino":null,
-        ///            "Datos":{ } }
+        ///            "TipoInclusion":null, "Datos":{ } }
         /// La Version es la que el cliente leyo: si otro usuario movio el
         /// expediente entretanto, la rutina responde CONFLICTO en vez de pisar
         /// el cambio.
+        ///
+        /// Para mover VARIOS expedientes con una sola accion —el Anexo 4 que
+        /// agrupa Anexos 3 de varias areas usuarias— se manda IdExpedientes en
+        /// lugar de IdExpediente:
+        ///   { "IdExpedientes": [ {"IdExpediente":"...","Version":3},
+        ///                        {"IdExpediente":"...","Version":7} ], ... }
+        /// Se mueven todos en la misma transaccion: o avanzan todos o ninguno.
         /// </summary>
         [HttpPost]
         public IActionResult ejecutarTransicion(string ipInput)
@@ -104,8 +111,14 @@ namespace anin.scm.Controllers
         /// y despues se registra aqui el documento_sistema que devolvio. Un
         /// documento sin archivo no se registra.
         ///
-        /// Si la version vigente ya estaba firmada, la rutina crea una version
-        /// nueva y anula la anterior: es la invalidacion de firma de CMN-18.
+        /// Si la version vigente ya tenia firmas, la rutina crea una version
+        /// nueva y las invalida todas: es la invalidacion de firma de CMN-18.
+        ///
+        /// Un Anexo 4 consolidado se registra UNA vez para los N expedientes que
+        /// cubre, mandando IdExpedientes y su propio Numero:
+        ///   { "IdExpedientes":["...","..."], "Numero":"A4-2026-000007", ... }
+        /// El tipo de documento debe admitir consolidado; el Anexo 3, que es
+        /// individual, no lo admite.
         /// </summary>
         [HttpPost]
         public IActionResult registrarDocumento(string ipInput)
@@ -123,6 +136,12 @@ namespace anin.scm.Controllers
         /// que es dato sembrado. Este endpoint es tambien el punto de entrada
         /// del firmador institucional cuando se integre: recibira el PDF ya
         /// firmado y su huella, y nada mas del sistema cambiara.
+        ///
+        /// Los anexos llevan VARIAS firmas en cadena. Cada llamada registra la
+        /// del rol que la hace; la version queda PARCIAL mientras falte alguna y
+        /// pasa a FIRMADO con la ultima. La respuesta trae FirmasPendientes y la
+        /// lista Pendientes para que la pantalla diga a quien le toca. Repetir la
+        /// firma de un rol que ya firmo no es error: responde OK sin duplicarla.
         ///
         /// Firmar NO mueve el expediente. La accion del flujo que corresponde
         /// —CMN_FIRMAR_A3, REQ_FIRMAR_AU— se ejecuta despues por
