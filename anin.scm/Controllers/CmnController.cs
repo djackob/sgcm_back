@@ -10,8 +10,8 @@ namespace anin.scm.Controllers
     ///
     /// Las acciones del flujo (firmar, observar, derivar, validar, recepcionar)
     /// NO estan aqui: son transiciones de estado y viven en SigcmController,
-    /// porque el motor es el mismo para todos los modulos. Aqui solo esta lo
-    /// propio del CMN: registrar la solicitud, consultarla y listarla.
+    /// porque el motor es el mismo para todos los modulos. Aqui esta lo propio
+    /// del CMN: la solicitud (Anexo 3) y el paquete (Anexo 4).
     /// </summary>
     [Authorize]
     public class CmnController : ControladorPuente
@@ -61,6 +61,43 @@ namespace anin.scm.Controllers
         public IActionResult registrarSolicitud(string ipInput)
         {
             return EjecutarConActor("cmn.paRegistrarSolicitud", ipInput);
+        }
+
+        #endregion
+
+        #region "Anexo 4 - Aprobacion de modificaciones del CMN"
+
+        /// <summary>
+        /// Reserva el Anexo 4 con uno o varios Anexos 3 ya aprobados, emite su
+        /// codigo y devuelve el paquete para armar el PDF.
+        ///
+        /// Entrada: { "IdSolicitudes": ["...", "..."], "Sustento": null }
+        /// </summary>
+        [HttpPost]
+        public IActionResult generarAnexo4(string ipInput)
+        {
+            return EjecutarConActor("cmn.paGenerarAnexo4", ipInput);
+        }
+
+        /// <summary>
+        /// El paquete completo, para armar o reconstruir el PDF.
+        /// Entrada: { "IdPaquete": "..." } o { "IdSolicitud": "..." }
+        /// </summary>
+        [HttpGet]
+        public IActionResult obtenerAnexo4(string ipInput)
+        {
+            return EjecutarConActor("cmn.paObtenerAnexo4", ipInput);
+        }
+
+        /// <summary>
+        /// Deshace un Anexo 4 que todavia no salio del especialista y libera
+        /// sus Anexos 3.
+        /// Entrada: { "IdPaquete": "...", "Motivo": "..." }
+        /// </summary>
+        [HttpPost]
+        public IActionResult anularAnexo4(string ipInput)
+        {
+            return EjecutarConActor("cmn.paAnularAnexo4", ipInput);
         }
 
         #endregion
