@@ -28,6 +28,8 @@ namespace anin.scm.Controllers
         ///            "AnoEje":2026, "CentroCosto":null,
         ///            "CodigoTipoContratacion":null, "Texto":null,
         ///            "Limite":50, "Desplazamiento":0 } }
+        /// Cada fila incluye Transiciones (acciones de este actor sobre ese
+        /// expediente), para pintar los botones sin N llamadas extra.
         /// </summary>
         [HttpGet]
         public IActionResult listarRequerimiento(string ipInput)

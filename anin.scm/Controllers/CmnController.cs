@@ -10,8 +10,8 @@ namespace anin.scm.Controllers
     ///
     /// Las acciones del flujo (firmar, observar, derivar, validar, recepcionar)
     /// NO estan aqui: son transiciones de estado y viven en SigcmController,
-    /// porque el motor es el mismo para todos los modulos. Aqui solo esta lo
-    /// propio del CMN: registrar la solicitud, consultarla y listarla.
+    /// porque el motor es el mismo para todos los modulos. Aqui esta lo propio
+    /// del CMN: la solicitud (Anexo 3) y el paquete (Anexo 4).
     /// </summary>
     [Authorize]
     public class CmnController : ControladorPuente
@@ -26,6 +26,8 @@ namespace anin.scm.Controllers
         /// Entrada: { "Filtro": { "SoloMiBandeja":true, "CodigoEstado":null,
         ///            "AnoEje":2026, "CentroCosto":null, "Texto":null,
         ///            "Limite":50, "Desplazamiento":0 } }
+        /// Cada fila incluye Transiciones (acciones de este actor sobre ese
+        /// expediente), para pintar los botones sin N llamadas extra.
         /// </summary>
         [HttpGet]
         public IActionResult listarSolicitud(string ipInput)

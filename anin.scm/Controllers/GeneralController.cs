@@ -94,5 +94,24 @@ namespace anin.scm.Controllers
             return Ok(JsonDocument.Parse(
                 "{\"estado\":0,\"mensaje\":\"No se encontro el archivo indicado.\"}"));
         }
+
+        [HttpGet]
+        public IActionResult ConsultaPersonaReniec(string ipInput)
+        {
+            try
+            {
+                var strResultado = JsonDocument.Parse(UT_Reniec.ConsultaPersonaReniec(ipInput));
+                if (strResultado != null)
+                {
+                    return Ok(strResultado);
+                }
+
+                return NotFound();
+            }
+            catch (Exception)
+            {
+                return NotFound();
+            }
+        }
     }
 }
