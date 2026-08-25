@@ -56,7 +56,7 @@ namespace anin.scm.Controllers
         ///
         /// Entrada: { "IdExpediente":"...", "CodigoTransicion":"CMN_ENVIAR_OA",
         ///            "Version":3, "Comentario":"...", "IdUnidadDestino":null,
-        ///            "TipoInclusion":null, "Datos":{ } }
+        ///            "Datos":{ } }
         /// La Version es la que el cliente leyo: si otro usuario movio el
         /// expediente entretanto, la rutina responde CONFLICTO en vez de pisar
         /// el cambio.
