@@ -22,7 +22,7 @@ namespace anin.scm.Controllers
         /// Entrada: { "Maestro":"CATALOGO", "AnoEje":2026, "SecEjec":1750,
         ///            "CentroCosto":"01.01", "Texto":"...", "Limite":50 }
         /// Maestros validos: CENTRO_COSTO, META, FUENTE_FINANC, TAREA,
-        /// UNIDAD_MEDIDA, CATALOGO, CUADRO_VIGENTE, TECHO, ETAPA_CENTRO.
+        /// UNIDAD_MEDIDA, CATALOGO, CUADRO_VIGENTE, TECHO, ETAPA_CENTRO, PEDIDO.
         /// </summary>
         [HttpGet]
         public IActionResult listarMaestroSiga(string ipInput)
