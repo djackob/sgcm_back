@@ -75,6 +75,30 @@ namespace anin.scm.Controllers
         }
 
         /// <summary>
+        /// A quien puede derivarle el expediente el actor que pregunta.
+        ///
+        /// Entrada: { "IdExpediente":"..." } o { "CodigoModulo":"CMN" }
+        /// Salida : Puestos, y dentro de cada uno las Personas que lo ocupan.
+        ///
+        /// Los destinos salen del arbol de sigcm.RolDerivacion, no de una lista
+        /// en el cliente: en CMN el area usuaria no pasa por el coordinador y en
+        /// Requerimiento si, y esa diferencia es una fila de configuracion.
+        ///
+        /// Viene agrupado por puesto porque es como se elige: primero el escalon
+        /// —coordinador o especialista—, y solo si ese puesto tiene mas de un
+        /// ocupante, la persona. Con un ocupante la pantalla no pregunta.
+        ///
+        /// El IdUsuario elegido se manda despues en ejecutarTransicion como
+        /// IdResponsableDestino. La rutina lo vuelve a validar contra el mismo
+        /// arbol: esta lista es una comodidad, no el control.
+        /// </summary>
+        [HttpGet]
+        public IActionResult listarDestinatarioDerivacion(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paListarDestinatarioDerivacion", ipInput);
+        }
+
+        /// <summary>
         /// Historial, observaciones y cola de integracion de un expediente.
         /// Entrada: { "IdExpediente":"..." }
         /// </summary>
@@ -82,6 +106,32 @@ namespace anin.scm.Controllers
         public IActionResult obtenerTrazabilidad(string ipInput)
         {
             return EjecutarConActor("sigcm.paObtenerTrazabilidad", ipInput);
+        }
+
+        #endregion
+
+        #region "Accesos y perfiles"
+
+        /// <summary>
+        /// El tablero de accesos: padron sincronizado desde el SSO, mapeo de
+        /// perfiles, arbol de derivacion, unidades y las ultimas
+        /// sincronizaciones con sus descartes.
+        ///
+        /// Responde la pregunta que hoy solo se contesta con sqlcmd: por que
+        /// una persona no puede entrar. El motivo esta en Descartes de la ultima
+        /// sincronizacion, con su cuenta, su cod_perfil y su centro de costo.
+        ///
+        /// SOLO LECTURA. La configuracion sigue viniendo de la semilla, que es
+        /// la que viaja a produccion versionada. La unica accion del panel es
+        /// sincronizar, y esa es api/token/sincronizarPadronSso.
+        ///
+        /// El rol lo valida la rutina (51701), no este endpoint: que el menu no
+        /// muestre la opcion no impide que alguien la llame.
+        /// </summary>
+        [HttpGet]
+        public IActionResult obtenerPanelSso(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paObtenerPanelSso", ipInput);
         }
 
         #endregion
