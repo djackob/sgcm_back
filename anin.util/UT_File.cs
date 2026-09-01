@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using System.Net;
 using System.Text;
 
@@ -197,6 +197,27 @@ namespace anin.util
                 candidatos.Add(Path.Combine(strRutaFile, strSub.Replace("/", "\\"), strId));
             }
             candidatos.Add(Path.Combine(strRutaFile, strId));
+
+            /* PDFs firmados digitalmente antes del ajuste de carpeta en sfirma
+               quedaron bajo cmn aunque el modulo sea requerimiento. */
+            if (string.Equals(strSub, "requerimiento", StringComparison.OrdinalIgnoreCase))
+            {
+                candidatos.Add(Path.Combine(strRutaFile, "cmn", strId));
+            }
+
+            if (!strId.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                string strIdPdf = strId + ".pdf";
+                if (!string.IsNullOrEmpty(strSub))
+                {
+                    candidatos.Add(Path.Combine(strRutaFile, strSub.Replace("/", "\\"), strIdPdf));
+                }
+                candidatos.Add(Path.Combine(strRutaFile, strIdPdf));
+                if (string.Equals(strSub, "requerimiento", StringComparison.OrdinalIgnoreCase))
+                {
+                    candidatos.Add(Path.Combine(strRutaFile, "cmn", strIdPdf));
+                }
+            }
 
             foreach (string strCandidato in candidatos)
             {

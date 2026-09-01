@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace anin.scm.Services
 {
     /// <summary>
-    /// Consume periodicamente integracion.Operacion mediante W001.
+    /// Consume periodicamente integracion.Operacion mediante W001, W002 y W003.
     ///
     /// El worker no reimplementa la escritura ni abre SIGA directamente. Toda
     /// la traduccion, validacion, idempotencia, reintentos y mapeo permanecen en
@@ -101,33 +101,40 @@ namespace anin.scm.Services
 
             try
             {
-                string parametro = JsonSerializer.Serialize(new
-                {
-                    Actor = new
-                    {
-                        Usuario = _opciones.UsuarioAuditoria,
-                        Equipo = Environment.MachineName,
-                        Programa = "SIGCM-WORKER"
-                    },
-                    Modo = modo,
-                    Limite = _opciones.Limite
-                });
-
-                await using var comando = new SqlCommand(
-                    "integracion.paEscribirCuadroModificado", conexion)
-                {
-                    CommandType = CommandType.StoredProcedure,
-                    CommandTimeout = _opciones.TimeoutSegundos
-                };
-                comando.Parameters.Add("@parametro", SqlDbType.NVarChar, -1).Value = parametro;
-
-                string respuesta = await LeerRespuestaJsonAsync(comando, cancellationToken);
-                RegistrarResultado(respuesta, modo);
+                await DrenarEscritorAsync(conexion, "integracion.paEscribirCuadroModificado", modo, cancellationToken);
+                await DrenarEscritorAsync(conexion, "integracion.paEscribirCuadroAdquisicion", modo, cancellationToken);
+                await DrenarEscritorAsync(conexion, "integracion.paEscribirOrdenServicio", modo, cancellationToken);
             }
             finally
             {
                 await LiberarBloqueoAsync(conexion);
             }
+        }
+
+        private async Task DrenarEscritorAsync(
+            SqlConnection conexion, string procedimiento, string modo, CancellationToken cancellationToken)
+        {
+            string parametro = JsonSerializer.Serialize(new
+            {
+                Actor = new
+                {
+                    Usuario = _opciones.UsuarioAuditoria,
+                    Equipo = Environment.MachineName,
+                    Programa = "SIGCM-WORKER"
+                },
+                Modo = modo,
+                Limite = _opciones.Limite
+            });
+
+            await using var comando = new SqlCommand(procedimiento, conexion)
+            {
+                CommandType = CommandType.StoredProcedure,
+                CommandTimeout = _opciones.TimeoutSegundos
+            };
+            comando.Parameters.Add("@parametro", SqlDbType.NVarChar, -1).Value = parametro;
+
+            string respuesta = await LeerRespuestaJsonAsync(comando, cancellationToken);
+            RegistrarResultado(respuesta, modo, procedimiento);
         }
 
         private static async Task<bool> TomarBloqueoAsync(
@@ -197,7 +204,7 @@ namespace anin.scm.Services
                 "integracion.paEscribirCuadroModificado no devolvio la columna respuesta.");
         }
 
-        private void RegistrarResultado(string respuesta, string modo)
+        private void RegistrarResultado(string respuesta, string modo, string procedimiento)
         {
             using JsonDocument documento = JsonDocument.Parse(respuesta);
             JsonElement raiz = documento.RootElement;
@@ -210,7 +217,7 @@ namespace anin.scm.Services
             {
                 string mensaje = raiz.TryGetProperty("mensaje", out JsonElement valorMensaje)
                     ? valorMensaje.ToString() : "Respuesta sin mensaje.";
-                _logger.LogError("El drenaje SIGA fue rechazado: {Mensaje}", mensaje);
+                _logger.LogError("El drenaje SIGA ({Procedimiento}) fue rechazado: {Mensaje}", procedimiento, mensaje);
                 return;
             }
 
@@ -243,8 +250,8 @@ namespace anin.scm.Services
             if (tomadas > 0 || conError > 0)
             {
                 _logger.LogInformation(
-                    "Drenaje SIGA terminado. Modo={Modo}, Tomadas={Tomadas}, Escritas={Escritas}, Simuladas={Simuladas}, ConError={ConError}.",
-                    modo, tomadas, escritas, simuladas, conError);
+                    "Drenaje SIGA ({Procedimiento}) terminado. Modo={Modo}, Tomadas={Tomadas}, Escritas={Escritas}, Simuladas={Simuladas}, ConError={ConError}.",
+                    procedimiento, modo, tomadas, escritas, simuladas, conError);
             }
             else
             {

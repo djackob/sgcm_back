@@ -36,6 +36,17 @@ namespace anin.scm.Controllers
             return Responder(strRutina, ConActor(strIpInput));
         }
 
+        /// <summary>
+        /// Igual que EjecutarConActor pero devuelve el JSON crudo. Solo para el
+        /// puente de correo: SMTP no vive en SQL y hay que leer destinatarios
+        /// que la rutina ya decidio antes de llamar a UT_Correo.
+        /// </summary>
+        protected string EjecutarPayloadConActor(string strRutina, string? strIpInput)
+        {
+            DaProceso daProceso = new DaProceso();
+            return daProceso.ejecutarProceso(CONEXION, strRutina, ConActor(strIpInput));
+        }
+
         private IActionResult Responder(string strRutina, string strParametro)
         {
             DaProceso _Daproceso = new DaProceso();
