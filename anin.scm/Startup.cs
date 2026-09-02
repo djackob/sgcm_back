@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using anin.scm.Services;
@@ -57,7 +57,11 @@ namespace anin.scm
                     //tokendecryptionkey = new symmetricsecuritykey(encryption),
 
                     ValidateIssuer = false,
-                    ValidateAudience = false
+                    ValidateAudience = false,
+                    /* Homologacion: la jornada supera la hora del token. Sin
+                       este margen, el API responde 401 y el front muestra
+                       "La sesion ha caducado" en plena bandeja. */
+                    ClockSkew = TimeSpan.FromHours(8)
                 };
 
             });

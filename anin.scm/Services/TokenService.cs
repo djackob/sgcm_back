@@ -1,4 +1,4 @@
-﻿using Microsoft.IdentityModel.Tokens;
+using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -7,7 +7,7 @@ namespace anin.scm.Services
 {
     public class TokenService
     {
-        private const double EXPIRE_HOURS = 1.0;
+        private const double EXPIRE_HOURS = 8.0;
         public static string CreateToken(string strData)
         {
             var key = Encoding.ASCII.GetBytes(Settings.Secret);

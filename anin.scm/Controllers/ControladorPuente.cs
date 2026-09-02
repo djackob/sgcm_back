@@ -118,11 +118,27 @@ namespace anin.scm.Controllers
                 try
                 {
                     JsonNode? jnSesion = JsonNode.Parse(strSesion);
-                    strUsuario = jnSesion?["usuario"]?.GetValue<string>() ?? string.Empty;
+                    strUsuario = TextoNodo(jnSesion?["usuario"]);
+                    if (string.IsNullOrWhiteSpace(strUsuario))
+                        strUsuario = TextoNodo(jnSesion?["Usuario"]);
 
-                    JsonNode? jnDetalle = jnSesion?["detalle"]?[0];
-                    strUnidad = jnDetalle?["cod_dependencia"]?.GetValue<string>() ?? string.Empty;
-                    strRol = jnDetalle?["perfil"]?[0]?["cod_perfil"]?.GetValue<string>() ?? string.Empty;
+                    JsonNode? jnDetalle = jnSesion?["detalle"] is JsonArray
+                        ? jnSesion["detalle"]![0]
+                        : jnSesion?["detalle"];
+
+                    // El token crudo del SSO a veces trae centro_costo y no
+                    // cod_dependencia. paResolverActor acepta los dos.
+                    strUnidad = PrimeroNoVacio(
+                        TextoNodo(jnDetalle?["cod_dependencia"]),
+                        TextoNodo(jnDetalle?["CodigoUnidad"]),
+                        TextoNodo(jnDetalle?["centro_costo"]));
+
+                    JsonNode? jnPerfil = jnDetalle?["perfil"] is JsonArray
+                        ? jnDetalle!["perfil"]![0]
+                        : jnDetalle?["perfil"];
+                    strRol = PrimeroNoVacio(
+                        TextoNodo(jnPerfil?["cod_perfil"]),
+                        TextoNodo(jnPerfil?["CodigoRol"]));
                 }
                 catch (Exception)
                 {
@@ -144,6 +160,34 @@ namespace anin.scm.Controllers
                 // sigcm.EventoAuditoria todo lo que provoco un solo clic.
                 ["CorrelacionId"] = Guid.NewGuid().ToString()
             };
+        }
+
+        private static string PrimeroNoVacio(params string[] valores)
+        {
+            foreach (string valor in valores)
+            {
+                if (!string.IsNullOrWhiteSpace(valor))
+                    return valor;
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// Lee un nodo JSON como texto aunque el SSO lo haya mandado como
+        /// numero (el DNI a veces llega sin comillas). GetValue&lt;string&gt;
+        /// en ese caso lanza y dejaba el actor vacio.
+        /// </summary>
+        private static string TextoNodo(JsonNode? nodo)
+        {
+            if (nodo is not JsonValue valor)
+                return string.Empty;
+
+            if (valor.TryGetValue(out string? texto))
+                return texto?.Trim() ?? string.Empty;
+
+            string crudo = valor.ToJsonString().Trim();
+            return crudo.Trim('"');
         }
     }
 }
