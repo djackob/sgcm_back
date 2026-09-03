@@ -116,6 +116,33 @@ namespace anin.scm.Controllers
             }
         }
 
+        /// <summary>
+        /// Razon social y estado de un contribuyente, por RUC. Es el gemelo de
+        /// ConsultaPersonaReniec para el proveedor persona juridica: en el Anexo
+        /// 5 el RUC se tecleaba entero y la razon social tambien, y los dos
+        /// tienen que coincidir con SUNAT o la orden sale a nombre equivocado.
+        ///
+        /// Entrada: el RUC en crudo, igual que RENIEC recibe el DNI.
+        /// </summary>
+        [HttpGet]
+        public IActionResult ConsultaRucSunat(string ipInput)
+        {
+            try
+            {
+                var strResultado = JsonDocument.Parse(UT_Sunat.ConsultaRuc(ipInput));
+                if (strResultado != null)
+                {
+                    return Ok(strResultado);
+                }
+
+                return NotFound();
+            }
+            catch (Exception)
+            {
+                return NotFound();
+            }
+        }
+
         #region "Ubigeo y usuario externo (SSO / general)"
 
         /// <summary>

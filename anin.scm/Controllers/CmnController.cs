@@ -1,5 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using anin.util;
 
 namespace anin.scm.Controllers
 {
@@ -110,6 +114,140 @@ namespace anin.scm.Controllers
         public IActionResult anularAnexo4(string ipInput)
         {
             return EjecutarConActor("cmn.paAnularAnexo4", ipInput);
+        }
+
+        /// <summary>
+        /// Avisa al area usuaria que su modificacion del CMN ya se hizo.
+        ///
+        /// La DERIVACION en el sistema no se hace aqui: la transicion
+        /// CMN_ABAST_JEFE_FIRMAR_A4 deja el expediente en CMN_A4_ENVIADO, cuyo
+        /// responsable es AREA_JEFE, y el enrutamiento de F004 lo devuelve a la
+        /// unidad de origen. Esto es solo el correo, que es lo que faltaba: el
+        /// area usuaria no vive dentro del sistema y su bandeja esta quieta la
+        /// mayor parte del tiempo.
+        ///
+        /// Mismo reparto que la invitacion al locador: SMTP no corre en SQL, asi
+        /// que la rutina arma el sobre, aqui se envia con el Anexo 4 adjunto y se
+        /// vuelve a marcar el resultado. Si el correo falla NO se devuelve error:
+        /// el expediente ya esta en la bandeja del area y la aprobacion en SIGA
+        /// ya ocurrio; solo falto el aviso, y se puede reintentar.
+        ///
+        /// Se llama una vez por SOLICITUD: un Anexo 4 puede agrupar Anexos 3 de
+        /// varias areas usuarias y cada una recibe el suyo.
+        ///
+        /// Entrada: { "IdSolicitud":"..." }
+        /// </summary>
+        [HttpPost]
+        public IActionResult notificarAnexo4(string ipInput)
+        {
+            string strSobre = EjecutarPayloadConActor(
+                "cmn.paPrepararNotificacionAnexo4", ipInput);
+
+            JsonNode? jnSobre;
+            try
+            {
+                jnSobre = JsonNode.Parse(strSobre);
+            }
+            catch (JsonException)
+            {
+                return StatusCode(500, JsonDocument.Parse(
+                    "{\"estado\":0,\"codigo\":\"CONTRATO\",\"mensaje\":\"La rutina de aviso del Anexo 4 devolvio una respuesta que no es JSON.\"}"));
+            }
+
+            if ((jnSobre?["estado"]?.GetValue<int>() ?? 0) != 1)
+            {
+                return Ok(JsonDocument.Parse(strSobre));
+            }
+
+            string strPara = jnSobre?["Destinatario"]?.GetValue<string>() ?? string.Empty;
+            string? strCopia = jnSobre?["Copia"]?.GetValue<string>();
+            string strAsunto = jnSobre?["Asunto"]?.GetValue<string>() ?? string.Empty;
+            string strCuerpo = jnSobre?["Cuerpo"]?.GetValue<string>() ?? string.Empty;
+            string? strAnexo4 = jnSobre?["Anexo4Documento"]?.GetValue<string>();
+            string? strNombreA4 = jnSobre?["NombreAnexo4"]?.GetValue<string>();
+
+            /* El Anexo 4 firmado va adjunto. Si el archivo no esta en el file
+               server el aviso se manda igual: el texto ya dice lo importante y
+               el documento sigue disponible en el expediente. */
+            List<AdjuntoCorreo> adjuntos = new List<AdjuntoCorreo>();
+            if (!string.IsNullOrWhiteSpace(strAnexo4)
+                && UT_File.TryRutaFisica(strAnexo4, "cmn", out string strRuta))
+            {
+                adjuntos.Add(new AdjuntoCorreo
+                {
+                    Nombre = string.IsNullOrWhiteSpace(strNombreA4) ? strAnexo4 : strNombreA4,
+                    Ruta = strRuta
+                });
+            }
+
+            string strEnvio = UT_Correo.envioCorreo("de", strPara, strAsunto, strCuerpo, strCopia, adjuntos);
+
+            JsonNode? jnEnvio;
+            try
+            {
+                jnEnvio = JsonNode.Parse(strEnvio);
+            }
+            catch (JsonException)
+            {
+                jnEnvio = JsonNode.Parse("{\"estado\":0,\"mensaje\":\"El envio de correo no devolvio JSON.\"}");
+            }
+
+            bool blEnviado = (jnEnvio?["estado"]?.GetValue<int>() ?? 0) == 1;
+            string strMsgCorreo = jnEnvio?["mensaje"]?.GetValue<string>()
+                ?? (blEnviado ? "Envio de correo satisfactorio" : "No se pudo enviar el correo.");
+
+            JsonObject joMarca;
+            try
+            {
+                joMarca = string.IsNullOrWhiteSpace(ipInput)
+                    ? new JsonObject()
+                    : JsonNode.Parse(ipInput) as JsonObject ?? new JsonObject();
+            }
+            catch (JsonException)
+            {
+                joMarca = new JsonObject();
+            }
+
+            joMarca["Destinatario"] = strPara;
+            joMarca["Copia"] = strCopia;
+            joMarca["ResultadoCorreo"] = strMsgCorreo;
+            joMarca["CorreoEnviado"] = blEnviado;
+            joMarca["Anexo4Documento"] = strAnexo4;
+
+            string strMarca = EjecutarPayloadConActor(
+                "cmn.paMarcarAnexo4Notificado", joMarca.ToJsonString());
+
+            JsonNode? jnMarca;
+            try
+            {
+                jnMarca = JsonNode.Parse(strMarca);
+            }
+            catch (JsonException)
+            {
+                jnMarca = JsonNode.Parse(
+                    "{\"estado\":1,\"mensaje\":\"Se aviso al area usuaria. No se pudo leer la confirmacion de la rutina.\"}");
+            }
+
+            if (jnMarca is JsonObject joRespuesta)
+            {
+                joRespuesta["CorreoEnviado"] = blEnviado;
+                joRespuesta["mensajeCorreo"] = strMsgCorreo;
+                if (!blEnviado)
+                {
+                    joRespuesta["mensaje"] =
+                        "El Anexo 4 quedo en la bandeja del area usuaria. El correo no se envio: " + strMsgCorreo;
+                }
+            }
+
+            try
+            {
+                return Ok(JsonDocument.Parse(jnMarca?.ToJsonString() ?? strMarca));
+            }
+            catch (JsonException)
+            {
+                return Ok(JsonDocument.Parse(
+                    "{\"estado\":1,\"mensaje\":\"Se registro el aviso del Anexo 4.\"}"));
+            }
         }
 
         #endregion
