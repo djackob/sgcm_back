@@ -51,9 +51,9 @@ namespace anin.scm.Services
         ///   { "estado":"ERROR",  "mensaje": "..." }
         ///
         /// El caso PERFIL existe porque el frontend consume detalle[0].perfil[0]:
-        /// una sesion lleva UNA terna. Quien ejerce dos -hoy la coordinadora que
-        /// atiende Desarrollo de Sistemas y Abastecimiento- tiene que decir con
-        /// cual entra, igual que en /acceso-local.
+        /// una sesion lleva UNA terna. Si hay una sola terna de area usuaria, se
+        /// entra con esa (jefe o coordinador AU) y no se pregunta, igual que
+        /// Gustavo en OTI. El selector queda para quien tiene dos sombreros AU.
         /// </summary>
         public static string Ingresar(string strToken, string? strEquipo)
         {
@@ -73,7 +73,15 @@ namespace anin.scm.Services
                     "El SSO valido el token pero no devolvio la cuenta del usuario."));
             }
 
-            Sincronizar("INGRESO", strCuenta, strEquipo);
+            try
+            {
+                Sincronizar("INGRESO", strCuenta, strEquipo);
+            }
+            catch (Exception)
+            {
+                // Sin padron fresco se entra con la ultima terna local. Caer
+                // aqui no puede impedir el Anexo 3 de quien ya esta registrado.
+            }
 
             return ResolverSesion(strCuenta, strEquipo);
         }
@@ -146,13 +154,36 @@ namespace anin.scm.Services
         {
             DaProcesoSso _DaSso = new DaProcesoSso();
 
-            string? strSobre = _DaSso.ArmarSobreSincronizacion(
-                strDisparador, strCuenta, strEquipo, "SIGCM-SSO");
+            string strPadron = _DaSso.EjecutarProceso(
+                "SELECT login.fn_listar_login_usuario_perfil_sistema_sgcm(NULL)::text;")
+                .RootElement.GetRawText();
+            string strDependencia = _DaSso.EjecutarProceso(@"
+                SELECT COALESCE(json_agg(d)::text, '[]')
+                  FROM (
+                        SELECT id_dependencia, id_padre, cod_dependencia,
+                               siglas, descripcion, centro_costo
+                          FROM login.tm_login_dependencia
+                         WHERE COALESCE(activo, true)
+                           AND centro_costo IS NOT NULL
+                           AND btrim(centro_costo) <> ''
+                         ORDER BY id_dependencia
+                       ) AS d;").RootElement.GetRawText();
 
-            if (string.IsNullOrWhiteSpace(strSobre))
+            if (string.IsNullOrWhiteSpace(strPadron) || strPadron.StartsWith("{\"estado\":0")
+                || string.IsNullOrWhiteSpace(strDependencia) || strDependencia.StartsWith("{\"estado\":0"))
             {
                 return string.Empty;
             }
+
+            string strSobre = string.Concat(
+                "{\"Disparador\":", JsonSerializer.Serialize(strDisparador),
+                ",\"Cuenta\":", JsonSerializer.Serialize(strCuenta ?? string.Empty),
+                ",\"Completo\":true",
+                ",\"Equipo\":", JsonSerializer.Serialize(strEquipo ?? "sso"),
+                ",\"Programa\":\"SIGCM-SSO\"",
+                ",\"Dependencia\":", strDependencia,
+                ",\"Padron\":", strPadron,
+                "}");
 
             DaProceso _Daproceso = new DaProceso();
             return _Daproceso.ejecutarProceso(CONEXION, "sigcm.paSincronizarPadronSso", strSobre, 120);
@@ -205,6 +236,33 @@ namespace anin.scm.Services
                         return AbrirSesion(strCuenta,
                             jeUnico.GetProperty("CodigoRol").GetString() ?? string.Empty,
                             jeUnico.GetProperty("CodigoUnidad").GetString() ?? string.Empty,
+                            strEquipo);
+                    }
+
+                    /* Misma regla que el jefe de OTI: si solo hay una terna de
+                       area usuaria, se entra con esa y no se pregunta. Evelyn
+                       es coordinadora AU de OTI y ademas coordinadora de
+                       Abastecimiento/UDS; Gustavo es jefe AU y administrador.
+                       El selector queda para quien tiene dos sombreros AU. */
+                    JsonElement jeAreaUsuaria = default;
+                    int intAreaUsuaria = 0;
+
+                    foreach (JsonElement jePerfil in jePerfiles.EnumerateArray())
+                    {
+                        string strRol = jePerfil.GetProperty("CodigoRol").GetString() ?? string.Empty;
+
+                        if (strRol.StartsWith("AREA_", StringComparison.Ordinal))
+                        {
+                            intAreaUsuaria++;
+                            jeAreaUsuaria = jePerfil;
+                        }
+                    }
+
+                    if (intAreaUsuaria == 1)
+                    {
+                        return AbrirSesion(strCuenta,
+                            jeAreaUsuaria.GetProperty("CodigoRol").GetString() ?? string.Empty,
+                            jeAreaUsuaria.GetProperty("CodigoUnidad").GetString() ?? string.Empty,
                             strEquipo);
                     }
 

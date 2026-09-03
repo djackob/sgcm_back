@@ -5,10 +5,17 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace anin.util
 {
+    public class AdjuntoCorreo
+    {
+        public string Nombre { get; set; } = string.Empty;
+        public string Ruta { get; set; } = string.Empty;
+    }
+
     public class UT_Correo
     {
         public static string envioCorreo(string strDe, string strPara, string strAsunto,
-            string strMensaje, string? strParaCopia = null)
+            string strMensaje, string? strParaCopia = null,
+            IReadOnlyList<AdjuntoCorreo>? adjuntos = null)
         {
             string StrEstado = "";
             try
@@ -35,6 +42,23 @@ namespace anin.util
                     }
                 }
 
+                if (adjuntos != null)
+                {
+                    foreach (AdjuntoCorreo adjunto in adjuntos)
+                    {
+                        if (string.IsNullOrWhiteSpace(adjunto.Ruta) || !File.Exists(adjunto.Ruta))
+                        {
+                            continue;
+                        }
+                        Attachment att = new Attachment(adjunto.Ruta);
+                        if (!string.IsNullOrWhiteSpace(adjunto.Nombre))
+                        {
+                            att.Name = adjunto.Nombre;
+                        }
+                        msg.Attachments.Add(att);
+                    }
+                }
+
                 msg.IsBodyHtml = true;
                 msg.SubjectEncoding = System.Text.Encoding.UTF8;
                 msg.Subject =  strAsunto;
@@ -45,6 +69,7 @@ namespace anin.util
                 smtpClient.Host = UT_Configuracion.AppSettings("appSettings:app_correo", "host");
                 smtpClient.Port = int.Parse(UT_Configuracion.AppSettings("appSettings:app_correo", "puerto"));
                 smtpClient.EnableSsl = true;
+                smtpClient.UseDefaultCredentials = false;
                 NetworkCredential credentials = new NetworkCredential(UT_Configuracion.AppSettings("appSettings:app_correo", "de"), UT_Configuracion.AppSettings("appSettings:app_correo", "clave"));
                 smtpClient.Credentials = credentials;
 #pragma warning disable CS8622 // La nulabilidad de los tipos de referencia del tipo de parámetro no coincide con el delegado de destino (posiblemente debido a los atributos de nulabilidad).
@@ -57,7 +82,7 @@ namespace anin.util
             }
             catch (Exception ex)
             {
-                StrEstado = "{\"estado\":0,\"mensaje\":\"" + ex.Message + "\"}";
+                StrEstado = "{\"estado\":0,\"mensaje\":\"" + (ex.Message ?? "").Replace("\\", "\\\\").Replace("\"", "'") + "\"}";
             }
             return StrEstado;
         }

@@ -1,3 +1,4 @@
+using anin.dataAccess;
 using anin.util;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -62,6 +63,7 @@ namespace anin.scm.Controllers
         }
 
         [HttpGet]
+        [AllowAnonymous]
         public IActionResult DescargarArchivo(string strarchivo, string? strcarpeta = null)
         {
             string strId = UT_File.IdDocumentoSistema(strarchivo);
@@ -113,5 +115,65 @@ namespace anin.scm.Controllers
                 return NotFound();
             }
         }
+
+        #region "Ubigeo y usuario externo (SSO / general)"
+
+        /// <summary>
+        /// Departamentos INEI. general.fn_listar_departamento no recibe parametro.
+        /// Devuelve [{ "iddpto":"15", "departamento":"LIMA" }, ...].
+        /// </summary>
+        [HttpGet]
+        public IActionResult ListarDepartamento()
+        {
+            DaProcesoSso daSso = new DaProcesoSso();
+            return Ok(daSso.EjecutarProceso(
+                "SELECT general.fn_listar_departamento()::text;"));
+        }
+
+        /// <summary>
+        /// Provincias del departamento. Entrada: { "iddpto":"15" } (iddpto de
+        /// ListarDepartamento).
+        /// </summary>
+        [HttpGet]
+        public IActionResult ListarProvincia(string ipInput)
+        {
+            DaProcesoSso daSso = new DaProcesoSso();
+            return Ok(daSso.EjecutarProceso(
+                "SELECT general.fn_listar_provincia($1::json)::text;",
+                30,
+                string.IsNullOrWhiteSpace(ipInput) ? "{}" : ipInput));
+        }
+
+        /// <summary>
+        /// Distritos de la provincia. Entrada: { "idprov":"1501" } (idprov de
+        /// ListarProvincia).
+        /// </summary>
+        [HttpGet]
+        public IActionResult ListarDistrito(string ipInput)
+        {
+            DaProcesoSso daSso = new DaProcesoSso();
+            return Ok(daSso.EjecutarProceso(
+                "SELECT general.fn_listar_distrito($1::json)::text;",
+                30,
+                string.IsNullOrWhiteSpace(ipInput) ? "{}" : ipInput));
+        }
+
+        /// <summary>
+        /// Alta (o reactivacion de acceso) del locador como usuario externo
+        /// SGCM-E. login.fn_insertar_tm_login_usuario_externo_contrataciones.
+        /// ipInput llega del front con la forma que pide la funcion.
+        /// Tambien lo dispara notificarOrdenServicio despues del correo.
+        /// </summary>
+        [HttpPost]
+        public IActionResult InsertarUsuarioExterno(string ipInput)
+        {
+            DaProcesoSso daSso = new DaProcesoSso();
+            return Ok(daSso.EjecutarProceso(
+                "SELECT login.fn_insertar_tm_login_usuario_externo_contrataciones($1::json)::text;",
+                30,
+                string.IsNullOrWhiteSpace(ipInput) ? "{}" : ipInput));
+        }
+
+        #endregion
     }
 }
