@@ -33,6 +33,17 @@ namespace anin.scm.Controllers
             return EjecutarConActor("pago.paListarPortalLocador", ipInput);
         }
 
+        /// <summary>
+        /// Lee de SIGA el estado real de la orden de servicio: si esta emitida,
+        /// si tiene compromiso SIAF y con que expediente. Actualiza los hitos 1
+        /// y 4. Entrada: { "IdExpediente": "..." }.
+        /// </summary>
+        [HttpGet]
+        public IActionResult sincronizarOrdenSiga(string ipInput)
+        {
+            return EjecutarConActor("pago.paSincronizarOrdenSiga", ipInput);
+        }
+
         [HttpPost]
         public IActionResult abrirExpedientePago(string ipInput)
         {
