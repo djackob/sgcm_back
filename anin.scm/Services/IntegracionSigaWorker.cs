@@ -104,6 +104,7 @@ namespace anin.scm.Services
                 await DrenarEscritorAsync(conexion, "integracion.paEscribirCuadroModificado", modo, cancellationToken);
                 await DrenarEscritorAsync(conexion, "integracion.paEscribirCuadroAdquisicion", modo, cancellationToken);
                 await DrenarEscritorAsync(conexion, "integracion.paEscribirOrdenServicio", modo, cancellationToken);
+                await DrenarEscritorAsync(conexion, "integracion.paEscribirRecepcionOrden", modo, cancellationToken);
             }
             finally
             {
