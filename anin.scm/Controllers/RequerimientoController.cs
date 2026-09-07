@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using anin.dataAccess;
 using anin.util;
 using System.Collections.Generic;
 
@@ -329,31 +328,13 @@ namespace anin.scm.Controllers
             string strMarca = EjecutarPayloadConActor(
                 "requerimiento.paMarcarOrdenNotificada", joMarca.ToJsonString());
 
-            JsonNode? jnMarca;
-            try
-            {
-                jnMarca = JsonNode.Parse(strMarca);
-            }
-            catch (JsonException)
-            {
-                return Ok(JsonDocument.Parse(
-                    "{\"estado\":1,\"mensaje\":\"El correo se envio. No se pudo leer la confirmacion de la rutina.\"}"));
-            }
-
-            DaProcesoSso daSso = new DaProcesoSso();
-            JsonDocument jdUsuarioExterno = daSso.EjecutarProceso(
-                "SELECT login.fn_insertar_tm_login_usuario_externo_contrataciones($1::json)::text;",
-                30,
-                string.IsNullOrWhiteSpace(ipInput) ? "{}" : ipInput);
-
-            if (jnMarca is JsonObject joRespuesta)
-            {
-                joRespuesta["UsuarioExterno"] = JsonNode.Parse(jdUsuarioExterno.RootElement.GetRawText());
-            }
+            /* El alta SGCM-E no se hace aqui: debe pasar siempre por
+               api/General/InsertarUsuarioExterno (validaciones propias del SSO).
+               El front lo invoca antes de notificarOrdenServicio. */
 
             try
             {
-                return Ok(JsonDocument.Parse(jnMarca?.ToJsonString() ?? strMarca));
+                return Ok(JsonDocument.Parse(strMarca));
             }
             catch (JsonException)
             {

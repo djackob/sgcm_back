@@ -129,17 +129,52 @@ namespace anin.scm.Controllers
         {
             try
             {
-                var strResultado = JsonDocument.Parse(UT_Sunat.ConsultaRuc(ipInput));
-                if (strResultado != null)
+                if (string.IsNullOrWhiteSpace(ipInput))
                 {
-                    return Ok(strResultado);
+                    return BadRequest(JsonDocument.Parse(
+                        "{\"estado\":0,\"mensaje\":\"Debe indicar el RUC.\"}"));
                 }
 
-                return NotFound();
+                /* Se reenvia el JSON tal cual llega del bus. Volver a serializar
+                   con Ok(JsonDocument) a veces deja un arbol que el front no
+                   reconoce (mismo caso que RENIEC). */
+                var json = UT_Sunat.ConsultaRuc(ipInput.Trim());
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    json = "{\"strcodigo\":\"-1\",\"strnombres\":\"\","
+                        + "\"strresultado\":\"Respuesta vacia del bus SUNAT.\"}";
+                }
+
+                return Content(json, "application/json");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return NotFound();
+                string motivo = (ex.GetBaseException().Message ?? string.Empty);
+                if (ex is TaskCanceledException
+                    || ex is OperationCanceledException
+                    || ex is TimeoutException
+                    || motivo.IndexOf("E/S", StringComparison.OrdinalIgnoreCase) >= 0
+                    || motivo.IndexOf("I/O", StringComparison.OrdinalIgnoreCase) >= 0
+                    || motivo.IndexOf("anul", StringComparison.OrdinalIgnoreCase) >= 0
+                    || motivo.IndexOf("canceled", StringComparison.OrdinalIgnoreCase) >= 0
+                    || motivo.IndexOf("cancelled", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    motivo = "SUNAT no respondió a tiempo. Intente nuevamente en unos momentos.";
+                }
+                else if (string.IsNullOrWhiteSpace(motivo))
+                {
+                    motivo = "Error al consultar SUNAT.";
+                }
+
+                motivo = motivo
+                    .Replace("\\", "\\\\")
+                    .Replace("\"", "\\\"")
+                    .Replace("\r", " ")
+                    .Replace("\n", " ");
+                return Content(
+                    "{\"strcodigo\":\"-1\",\"strnombres\":\"\",\"strresultado\":\""
+                    + motivo + "\"}",
+                    "application/json");
             }
         }
 
@@ -189,7 +224,8 @@ namespace anin.scm.Controllers
         /// Alta (o reactivacion de acceso) del locador como usuario externo
         /// SGCM-E. login.fn_insertar_tm_login_usuario_externo_contrataciones.
         /// ipInput llega del front con la forma que pide la funcion.
-        /// Tambien lo dispara notificarOrdenServicio despues del correo.
+        /// Punto unico de entrada: el flujo de notificacion O/S debe llamar
+        /// este endpoint (no invocar la funcion SSO desde otro puente).
         /// </summary>
         [HttpPost]
         public IActionResult InsertarUsuarioExterno(string ipInput)

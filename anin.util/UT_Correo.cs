@@ -60,10 +60,11 @@ namespace anin.util
                 }
 
                 msg.IsBodyHtml = true;
+                msg.HeadersEncoding = System.Text.Encoding.UTF8;
                 msg.SubjectEncoding = System.Text.Encoding.UTF8;
-                msg.Subject =  strAsunto;
+                msg.Subject = strAsunto ?? string.Empty;
                 msg.BodyEncoding = System.Text.Encoding.UTF8;
-                msg.Body = strMensaje;
+                msg.Body = strMensaje ?? string.Empty;
                 msg.DeliveryNotificationOptions = DeliveryNotificationOptions.OnFailure;
                 SmtpClient smtpClient = new SmtpClient();
                 smtpClient.Host = UT_Configuracion.AppSettings("appSettings:app_correo", "host");
