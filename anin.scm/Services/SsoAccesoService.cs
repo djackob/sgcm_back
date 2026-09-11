@@ -131,6 +131,43 @@ namespace anin.scm.Services
         }
 
         /// <summary>
+        /// Refresco del padron ANTES de mandar un correo.
+        ///
+        /// POR QUE EXISTE
+        /// El correo de una persona lo gobierna el SSO, pero las rutinas arman el
+        /// destinatario leyendo sigcm.Usuario, que es una REPLICA. Hasta ahora esa
+        /// replica solo se refrescaba al ingresar, y el token dura ocho horas: quien
+        /// ya estaba dentro trabajaba toda la jornada contra la foto del padron del
+        /// momento en que entro.
+        ///
+        /// Lo que eso costaba, con fecha: el 2026-09-09 a las 00:33 se cambio en el
+        /// SSO el correo de una cuenta, y el aviso del Anexo 4 de la 01:03 se fue
+        /// igual a la direccion anterior. Se "arreglo solo" a las 09:59, cuando
+        /// alguien volvio a entrar y el padron se reconcilio. Un aviso que llega a
+        /// la bandeja equivocada no se puede deshacer.
+        ///
+        /// POR QUE AQUI Y NO EN UN MIDDLEWARE
+        /// Una notificacion es infrecuente; una peticion no. Colgar la sincronizacion
+        /// de cada request ataria la latencia de todas las pantallas a la salud de
+        /// una base ajena. Se paga el costo donde importa que el dato este fresco.
+        ///
+        /// NUNCA LANZA. Si el SSO no responde se sigue con la replica que haya: un
+        /// correo con el destinatario de ayer es preferible a un expediente que no
+        /// avanza. Es la misma regla que ya gobierna el ingreso.
+        /// </summary>
+        public static void RefrescarAntesDeNotificar(string? strCuenta, string? strEquipo)
+        {
+            try
+            {
+                Sincronizar("NOTIFICACION", strCuenta, strEquipo);
+            }
+            catch (Exception)
+            {
+                // Deliberado: ver el parrafo "NUNCA LANZA" de arriba.
+            }
+        }
+
+        /// <summary>
         /// Sincronizacion a pedido, para la opcion de mantenimiento. Devuelve el
         /// resumen de la reconciliacion con sus altas, sus bajas y los descartes.
         /// </summary>

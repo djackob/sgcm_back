@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using anin.scm.Services;
 
 namespace anin.scm.Controllers
 {
@@ -45,6 +46,37 @@ namespace anin.scm.Controllers
         {
             DaProceso daProceso = new DaProceso();
             return daProceso.ejecutarProceso(CONEXION, strRutina, ConActor(strIpInput));
+        }
+
+        /// <summary>
+        /// Pone al dia sigcm.Usuario contra el SSO antes de que la rutina decida
+        /// a que direccion se manda un correo.
+        ///
+        /// Va aqui, en la base, y no repetido en cada endpoint, por la misma
+        /// razon que ActorDeSesion: es facil olvidarlo, y olvidarlo no produce
+        /// un error visible. Produce un correo que llega a la bandeja de otra
+        /// persona, que es peor, porque nadie se entera hasta que alguien
+        /// pregunta por que no le llego nada.
+        ///
+        /// El detalle de por que el padron se queda viejo esta en
+        /// SsoAccesoService.RefrescarAntesDeNotificar.
+        /// </summary>
+        protected void RefrescarPadronSso()
+        {
+            string? strCuenta = null;
+
+            try
+            {
+                strCuenta = ActorDeSesion()["Usuario"]?.GetValue<string>();
+            }
+            catch (Exception)
+            {
+                // La cuenta solo viaja para la auditoria de la sincronizacion:
+                // el padron que se reconcilia es el completo. Sin ella se
+                // sincroniza igual.
+            }
+
+            SsoAccesoService.RefrescarAntesDeNotificar(strCuenta, Environment.MachineName);
         }
 
         private IActionResult Responder(string strRutina, string strParametro)

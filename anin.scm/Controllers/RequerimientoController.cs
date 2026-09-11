@@ -121,6 +121,10 @@ namespace anin.scm.Controllers
         [HttpPost]
         public IActionResult invitacionCotizacionLocador(string ipInput)
         {
+            /* El destinatario es el locador y sale del Anexo 5, no del SSO, pero
+               la copia institucional si sale de sigcm.Usuario. Mismo refresco. */
+            RefrescarPadronSso();
+
             string strSobre = EjecutarPayloadConActor(
                 "requerimiento.paPrepararInvitacionLocador", ipInput);
 
@@ -270,6 +274,12 @@ namespace anin.scm.Controllers
         [HttpPost]
         public IActionResult notificarOrdenServicio(string ipInput)
         {
+            /* La copia va al area usuaria y esa direccion la gobierna el SSO.
+               Desde F010 la rutina la resuelve contra sigcm.Usuario en vez de
+               contra la copia congelada en OrdenServicio; refrescar aqui es lo
+               que hace que esa lectura valga la pena. */
+            RefrescarPadronSso();
+
             string strSobre = EjecutarPayloadConActor(
                 "requerimiento.paPrepararNotificacionOrden", ipInput);
 
