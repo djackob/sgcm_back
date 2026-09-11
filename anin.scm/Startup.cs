@@ -34,6 +34,14 @@ namespace anin.scm
 
             services.AddHostedService<IntegracionSigaWorker>();
 
+            services.AddOptions<PadronSsoOptions>()
+                .Bind(Configuration.GetSection(PadronSsoOptions.Seccion))
+                .Validate(opciones => !opciones.Habilitado || opciones.IntervaloSegundos >= 60,
+                          "PadronSso:IntervaloSegundos debe ser al menos 60.")
+                .ValidateOnStart();
+
+            services.AddHostedService<PadronSsoWorker>();
+
             //services.AddHttpClient();
 
             var key = Encoding.ASCII.GetBytes(Settings.Secret);

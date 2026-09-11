@@ -140,6 +140,11 @@ namespace anin.scm.Controllers
         [HttpPost]
         public IActionResult notificarAnexo4(string ipInput)
         {
+            /* El destinatario lo decide la rutina leyendo sigcm.Usuario. Se pone
+               al dia contra el SSO primero: si el jefe del area cambio su correo
+               esta manana, el aviso tiene que ir al nuevo. */
+            RefrescarPadronSso();
+
             string strSobre = EjecutarPayloadConActor(
                 "cmn.paPrepararNotificacionAnexo4", ipInput);
 
