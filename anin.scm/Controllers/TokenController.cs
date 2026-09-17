@@ -2,7 +2,6 @@
 using anin.util;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Text;
 using System.Text.Json;
 
 namespace anin.scm.Controllers
@@ -75,20 +74,12 @@ namespace anin.scm.Controllers
         [HttpPost]
         public IActionResult tksistemaexterno(string strtoken)
         {
-            string strResultado = UT_Sso.ValidarAccesoExterno(strtoken);
-            StringBuilder sbResultado = new StringBuilder();
-            if (strResultado.Equals("{}") || strResultado.Equals(""))
-            {
-                sbResultado.Append(string.Concat("{\"estado\":\"", "ERROR", "\",\"mensaje\":"));
-                sbResultado.Append(string.Concat("\"", "Usuario y/o Clave Incorrecta.", "\"}"));
-            }
-            else
-            {
-                sbResultado.Append(string.Concat("{\"estado\":\"", "OK", "\",\"mensaje\":"));
-                sbResultado.Append(string.Concat(TokenService.CreateToken(strResultado.ToString()), "}"));
-            }
+            /* Misma puerta que tksistema: sesion con terna (cuenta+rol+unidad).
+               El sobre crudo del SSO externo no trae dependencia y tumba
+               paResolverActor con VALIDACION_ACTOR: falta Actor.Unidad. */
+            string strResultado = SsoAccesoService.IngresarExterno(strtoken, Environment.MachineName);
 
-            return Ok(JsonDocument.Parse(sbResultado.ToString()));
+            return Ok(JsonDocument.Parse(strResultado));
         }
 
         [HttpGet]

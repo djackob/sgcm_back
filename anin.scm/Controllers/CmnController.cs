@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -185,7 +186,18 @@ namespace anin.scm.Controllers
                 });
             }
 
-            string strEnvio = UT_Correo.envioCorreo("de", strPara, strAsunto, strCuerpo, strCopia, adjuntos);
+            string strEnvio;
+            try
+            {
+                strEnvio = UT_Correo.envioCorreo("de", strPara, strAsunto, strCuerpo, strCopia, adjuntos);
+            }
+            catch (Exception ex)
+            {
+                /* SMTP institucional caido: no bloquear la aprobacion ya firmada. */
+                strEnvio = "{\"estado\":0,\"mensaje\":\""
+                    + (ex.Message ?? "Fallo SMTP").Replace("\\", "\\\\").Replace("\"", "'")
+                    + "\"}";
+            }
 
             JsonNode? jnEnvio;
             try

@@ -87,6 +87,37 @@ namespace anin.scm.Services
         }
 
         /// <summary>
+        /// Ingreso del portal externo (SGCM-E / locador).
+        ///
+        /// El token lo certifica validartokenexterno (sistema S0078). No se
+        /// sincroniza el padron institucional: el locador no vive ahi. La
+        /// sesion se arma con la misma paObtenerSesion que el ingreso interno,
+        /// a partir de la terna en sigcm.UsuarioRol (p. ej. PROVEEDOR + D0001).
+        /// Sin eso, tksistemaexterno firmaba el sobre crudo del SSO —sin
+        /// cod_dependencia— y paResolverActor reventaba en falta Actor.Unidad.
+        /// </summary>
+        public static string IngresarExterno(string strToken, string? strEquipo)
+        {
+            string strIdentidad = anin.util.UT_Sso.ValidarAccesoExterno(strToken);
+
+            if (string.IsNullOrWhiteSpace(strIdentidad) || strIdentidad == "{}" || strIdentidad == "-1")
+            {
+                return Sobre("ERROR", JsonSerializer.Serialize(
+                    "Usuario y/o Clave Incorrecta."));
+            }
+
+            string? strCuenta = LeerCuenta(strIdentidad);
+
+            if (string.IsNullOrWhiteSpace(strCuenta))
+            {
+                return Sobre("ERROR", JsonSerializer.Serialize(
+                    "El SSO valido el token externo pero no devolvio la cuenta del usuario."));
+            }
+
+            return ResolverSesion(strCuenta, strEquipo);
+        }
+
+        /// <summary>
         /// Segundo tramo, cuando el usuario eligio con que perfil entra.
         /// El pase intermedio es lo que impide que este endpoint sea una puerta
         /// abierta: sin el, cualquiera podria pedir la sesion de cualquier cuenta
@@ -442,12 +473,16 @@ namespace anin.scm.Services
                         return null;
                     }
 
-                    foreach (string strCampo in new[] { "usuario", "Usuario", "dni", "Dni" })
+                    foreach (string strCampo in new[] { "usuario", "Usuario", "dni", "Dni", "nro_documento" })
                     {
-                        if (jeRaiz.TryGetProperty(strCampo, out JsonElement jeValor)
-                            && jeValor.ValueKind == JsonValueKind.String)
+                        if (jeRaiz.TryGetProperty(strCampo, out JsonElement jeValor))
                         {
-                            string? strValor = jeValor.GetString();
+                            string? strValor = jeValor.ValueKind switch
+                            {
+                                JsonValueKind.String => jeValor.GetString(),
+                                JsonValueKind.Number => jeValor.GetRawText(),
+                                _ => null
+                            };
 
                             if (!string.IsNullOrWhiteSpace(strValor))
                             {

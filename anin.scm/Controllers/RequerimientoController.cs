@@ -101,6 +101,12 @@ namespace anin.scm.Controllers
         }
 
         [HttpPost]
+        public IActionResult clasificarTipoRegistroProveedor(string ipInput)
+        {
+            return EjecutarConActor("requerimiento.paClasificarTipoRegistroProveedor", ipInput);
+        }
+
+        [HttpPost]
         public IActionResult registrarCcp(string ipInput)
         {
             return EjecutarConActor("requerimiento.paRegistrarCcp", ipInput);
