@@ -79,6 +79,134 @@ namespace anin.scm.Controllers
             SsoAccesoService.RefrescarAntesDeNotificar(strCuenta, Environment.MachineName);
         }
 
+        /// <summary>
+        /// Puente de correo generico: la rutina de preparacion arma el sobre
+        /// -Destinatario, Copia, Asunto, Cuerpo, AdjuntoDocumento, NombreAdjunto,
+        /// Carpeta-, aqui se envia con UT_Correo y la rutina de marca anota el
+        /// resultado. Es el mismo reparto de CmnController.notificarAnexo4 y
+        /// de la orden de servicio, escrito una vez para los modulos de
+        /// Modificacion-Ampliacion (7.3.5.4) y Resolucion (7.3.7.3).
+        ///
+        /// Si el correo falla NO se devuelve error: la decision ya esta tomada
+        /// y registrada; solo falto el aviso, y se puede reintentar. El mensaje
+        /// lo dice.
+        /// </summary>
+        protected IActionResult NotificarPorCorreo(string strRutinaPreparar, string strRutinaMarcar, string? strIpInput)
+        {
+            RefrescarPadronSso();
+
+            string strSobre = EjecutarPayloadConActor(strRutinaPreparar, strIpInput);
+
+            JsonNode? jnSobre;
+            try
+            {
+                jnSobre = JsonNode.Parse(strSobre);
+            }
+            catch (JsonException)
+            {
+                return StatusCode(500, JsonDocument.Parse(
+                    "{\"estado\":0,\"codigo\":\"CONTRATO\",\"mensaje\":\"La rutina de aviso devolvio una respuesta que no es JSON.\"}"));
+            }
+
+            if ((jnSobre?["estado"]?.GetValue<int>() ?? 0) != 1)
+            {
+                return Ok(JsonDocument.Parse(strSobre));
+            }
+
+            string strPara = jnSobre?["Destinatario"]?.GetValue<string>() ?? string.Empty;
+            string? strCopia = jnSobre?["Copia"]?.GetValue<string>();
+            string strAsunto = jnSobre?["Asunto"]?.GetValue<string>() ?? string.Empty;
+            string strCuerpo = jnSobre?["Cuerpo"]?.GetValue<string>() ?? string.Empty;
+            string? strAdjunto = jnSobre?["AdjuntoDocumento"]?.GetValue<string>();
+            string? strNombreAdjunto = jnSobre?["NombreAdjunto"]?.GetValue<string>();
+            string strCarpeta = jnSobre?["Carpeta"]?.GetValue<string>() ?? "sigcm";
+
+            List<AdjuntoCorreo> adjuntos = new List<AdjuntoCorreo>();
+            if (!string.IsNullOrWhiteSpace(strAdjunto)
+                && UT_File.TryRutaFisica(strAdjunto, strCarpeta, out string strRuta))
+            {
+                adjuntos.Add(new AdjuntoCorreo
+                {
+                    Nombre = string.IsNullOrWhiteSpace(strNombreAdjunto) ? strAdjunto : strNombreAdjunto,
+                    Ruta = strRuta
+                });
+            }
+
+            string strEnvio;
+            try
+            {
+                strEnvio = UT_Correo.envioCorreo("de", strPara, strAsunto, strCuerpo, strCopia, adjuntos);
+            }
+            catch (Exception ex)
+            {
+                strEnvio = "{\"estado\":0,\"mensaje\":\""
+                    + (ex.Message ?? "Fallo SMTP").Replace("\\", "\\\\").Replace("\"", "'")
+                    + "\"}";
+            }
+
+            JsonNode? jnEnvio;
+            try
+            {
+                jnEnvio = JsonNode.Parse(strEnvio);
+            }
+            catch (JsonException)
+            {
+                jnEnvio = JsonNode.Parse("{\"estado\":0,\"mensaje\":\"El envio de correo no devolvio JSON.\"}");
+            }
+
+            bool blEnviado = (jnEnvio?["estado"]?.GetValue<int>() ?? 0) == 1;
+            string strMsgCorreo = jnEnvio?["mensaje"]?.GetValue<string>()
+                ?? (blEnviado ? "Envio de correo satisfactorio" : "No se pudo enviar el correo.");
+
+            JsonObject joMarca;
+            try
+            {
+                joMarca = string.IsNullOrWhiteSpace(strIpInput)
+                    ? new JsonObject()
+                    : JsonNode.Parse(strIpInput) as JsonObject ?? new JsonObject();
+            }
+            catch (JsonException)
+            {
+                joMarca = new JsonObject();
+            }
+
+            joMarca["Destinatario"] = strPara;
+            joMarca["Copia"] = strCopia;
+            joMarca["ResultadoCorreo"] = strMsgCorreo;
+            joMarca["CorreoEnviado"] = blEnviado;
+
+            string strMarca = EjecutarPayloadConActor(strRutinaMarcar, joMarca.ToJsonString());
+
+            JsonNode? jnMarca;
+            try
+            {
+                jnMarca = JsonNode.Parse(strMarca);
+            }
+            catch (JsonException)
+            {
+                jnMarca = JsonNode.Parse("{\"estado\":1,\"mensaje\":\"Se registro el aviso. No se pudo leer la confirmacion de la rutina.\"}");
+            }
+
+            if (jnMarca is JsonObject joRespuesta)
+            {
+                joRespuesta["CorreoEnviado"] = blEnviado;
+                joRespuesta["mensajeCorreo"] = strMsgCorreo;
+                if (!blEnviado)
+                {
+                    joRespuesta["mensaje"] = "La decision quedo registrada. El correo no se envio: " + strMsgCorreo;
+                }
+            }
+
+            try
+            {
+                return Ok(JsonDocument.Parse(jnMarca?.ToJsonString() ?? strMarca));
+            }
+            catch (JsonException)
+            {
+                return Ok(JsonDocument.Parse("{\"estado\":1,\"mensaje\":\"Se registro el aviso.\"}"));
+            }
+        }
+
         private IActionResult Responder(string strRutina, string strParametro)
         {
             DaProceso _Daproceso = new DaProceso();
