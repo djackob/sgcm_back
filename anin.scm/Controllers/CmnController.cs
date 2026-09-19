@@ -70,6 +70,19 @@ namespace anin.scm.Controllers
             return EjecutarConActor("cmn.paRegistrarSolicitud", ipInput);
         }
 
+        /// <summary>
+        /// Abastecimiento corrige Ordinaria/Extraordinaria sin devolver a AU.
+        /// Solo mientras no exista Anexo 4 (paquete vivo o documento vigente).
+        ///
+        /// Entrada: { "IdSolicitud":"...", "TipoInclusion":"ORDINARIA"|"EXTRAORDINARIA",
+        ///            "JustificacionUrgencia":"..." }
+        /// </summary>
+        [HttpPost]
+        public IActionResult cambiarTipoInclusion(string ipInput)
+        {
+            return EjecutarConActor("cmn.paCambiarTipoInclusion", ipInput);
+        }
+
         #endregion
 
         #region "Anexo 4 - Aprobacion de modificaciones del CMN"
@@ -115,6 +128,26 @@ namespace anin.scm.Controllers
         public IActionResult anularAnexo4(string ipInput)
         {
             return EjecutarConActor("cmn.paAnularAnexo4", ipInput);
+        }
+
+        /// <summary>
+        /// Firmantes vigentes del Anexo 4 (ADMIN_SISTEMA). Entrada: { }.
+        /// </summary>
+        [HttpGet]
+        public IActionResult listarConfigFirmanteAnexo4(string ipInput)
+        {
+            return EjecutarConActor("cmn.paListarConfigFirmanteAnexo4", ipInput);
+        }
+
+        /// <summary>
+        /// Guarda 1 o 2 firmantes del Anexo 4 y alinea el circuito de firmas.
+        /// Entrada: { "Firmantes": [ { "CodigoRol":"ABAST_JEFE", "OrdenFirma":1,
+        ///              "EtiquetaCargo":"..." } ] }
+        /// </summary>
+        [HttpPost]
+        public IActionResult guardarConfigFirmanteAnexo4(string ipInput)
+        {
+            return EjecutarConActor("cmn.paGuardarConfigFirmanteAnexo4", ipInput);
         }
 
         /// <summary>

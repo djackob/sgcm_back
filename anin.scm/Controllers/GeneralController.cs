@@ -3,6 +3,7 @@ using anin.util;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace anin.scm.Controllers
 {
@@ -226,15 +227,145 @@ namespace anin.scm.Controllers
         /// ipInput llega del front con la forma que pide la funcion.
         /// Punto unico de entrada: el flujo de notificacion O/S debe llamar
         /// este endpoint (no invocar la funcion SSO desde otro puente).
+        ///
+        /// Si la respuesta trae clave_inicial distinta de null, se envian las
+        /// credenciales SSO (usuario + clave_inicial) al correo del payload.
+        /// Si clave_inicial es null, el usuario ya tenia contraseña: no se envia
+        /// correo de credenciales.
         /// </summary>
         [HttpPost]
         public IActionResult InsertarUsuarioExterno(string ipInput)
         {
+            string strInput = string.IsNullOrWhiteSpace(ipInput) ? "{}" : ipInput;
+
             DaProcesoSso daSso = new DaProcesoSso();
-            return Ok(daSso.EjecutarProceso(
+            JsonDocument jdAlta = daSso.EjecutarProceso(
                 "SELECT login.fn_insertar_tm_login_usuario_externo_contrataciones($1::json)::text;",
                 30,
-                string.IsNullOrWhiteSpace(ipInput) ? "{}" : ipInput));
+                strInput);
+
+            JsonObject? joRespuesta;
+            try
+            {
+                joRespuesta = JsonNode.Parse(jdAlta.RootElement.GetRawText()) as JsonObject;
+            }
+            catch (JsonException)
+            {
+                return Ok(jdAlta);
+            }
+
+            if (joRespuesta == null)
+            {
+                return Ok(jdAlta);
+            }
+
+            long idExterno = 0;
+            if (joRespuesta["id_usuario_externo"] != null
+                && joRespuesta["id_usuario_externo"]!.GetValueKind() != JsonValueKind.Null)
+            {
+                long.TryParse(joRespuesta["id_usuario_externo"]!.ToString(), out idExterno);
+            }
+
+            string? strClaveInicial = null;
+            if (joRespuesta["clave_inicial"] != null
+                && joRespuesta["clave_inicial"]!.GetValueKind() != JsonValueKind.Null)
+            {
+                strClaveInicial = joRespuesta["clave_inicial"]!.GetValue<string>()?.Trim();
+                if (string.IsNullOrEmpty(strClaveInicial))
+                {
+                    strClaveInicial = null;
+                }
+            }
+
+            /* Solo usuarios nuevos (clave_inicial informada) reciben el correo. */
+            if (idExterno > 0 && !string.IsNullOrEmpty(strClaveInicial))
+            {
+                string strUsuario = joRespuesta["usuario"]?.GetValue<string>()?.Trim()
+                    ?? string.Empty;
+                string strCorreo = ExtraerCorreoUsuarioExterno(strInput);
+                string strEnvio = EnviarCredencialesSso(strCorreo, strUsuario, strClaveInicial);
+
+                JsonNode? jnEnvio = null;
+                try
+                {
+                    jnEnvio = JsonNode.Parse(strEnvio);
+                }
+                catch (JsonException)
+                {
+                    jnEnvio = JsonNode.Parse(
+                        "{\"estado\":0,\"mensaje\":\"El envio de credenciales no devolvio JSON.\"}");
+                }
+
+                joRespuesta["CredencialesEnviadas"] =
+                    (jnEnvio?["estado"]?.GetValue<int>() ?? 0) == 1;
+                joRespuesta["MensajeCorreoCredenciales"] =
+                    jnEnvio?["mensaje"]?.GetValue<string>()
+                    ?? "No se pudo interpretar la respuesta del correo.";
+            }
+            else
+            {
+                joRespuesta["CredencialesEnviadas"] = false;
+                if (idExterno > 0)
+                {
+                    joRespuesta["MensajeCorreoCredenciales"] =
+                        "El usuario ya tiene contraseña en el SSO; no se envian credenciales.";
+                }
+            }
+
+            return Ok(JsonDocument.Parse(joRespuesta.ToJsonString()));
+        }
+
+        /// <summary>
+        /// Correo del locador en el JSON de alta:
+        /// { "correo": [ { "correo_electronico": "..." } ] }.
+        /// </summary>
+        private static string ExtraerCorreoUsuarioExterno(string strInput)
+        {
+            try
+            {
+                JsonNode? jn = JsonNode.Parse(strInput);
+                JsonArray? ja = jn?["correo"] as JsonArray;
+                if (ja == null || ja.Count == 0)
+                {
+                    return string.Empty;
+                }
+
+                string? str = ja[0]?["correo_electronico"]?.GetValue<string>();
+                return string.IsNullOrWhiteSpace(str) ? string.Empty : str.Trim();
+            }
+            catch (JsonException)
+            {
+                return string.Empty;
+            }
+        }
+
+        private static string EnviarCredencialesSso(
+            string strCorreo, string strUsuario, string strClaveInicial)
+        {
+            if (string.IsNullOrWhiteSpace(strCorreo))
+            {
+                return "{\"estado\":0,\"mensaje\":\"No hay correo del locador para enviar las credenciales SSO.\"}";
+            }
+
+            if (string.IsNullOrWhiteSpace(strUsuario) || string.IsNullOrWhiteSpace(strClaveInicial))
+            {
+                return "{\"estado\":0,\"mensaje\":\"Faltan usuario o clave_inicial para el correo de credenciales.\"}";
+            }
+
+            string strLink = UT_Configuracion.AppSettings("appSettings", "link_sistema")
+                ?? "https://dsso.anin.gob.pe/login";
+
+            string strAsunto = "Credenciales de acceso al portal del locador — SIGCM / ANIN";
+            string strCuerpo = string.Concat(
+                "<p>Se ha creado su acceso al sistema de contrataciones menores (SIGCM).</p>",
+                "<p><b>Usuario:</b> ", System.Net.WebUtility.HtmlEncode(strUsuario), "</p>",
+                "<p><b>Contraseña inicial:</b> ", System.Net.WebUtility.HtmlEncode(strClaveInicial), "</p>",
+                "<p>Ingrese en: <a href=\"", System.Net.WebUtility.HtmlEncode(strLink), "\">",
+                System.Net.WebUtility.HtmlEncode(strLink), "</a></p>",
+                "<p>Por seguridad, cambie la contraseña tras el primer ingreso.</p>",
+                "<p>Autoridad Nacional de Infraestructura — SIGCM</p>");
+
+            return UT_Correo.envioCorreo("de", strCorreo, strAsunto, strCuerpo);
         }
 
         #endregion
