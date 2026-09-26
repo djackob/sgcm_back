@@ -15,7 +15,9 @@ namespace anin.scm.Services
     ///   2. Se trae el padron completo de la base del SSO (DaProcesoSso) y se
     ///      reconcilia contra DBSIGCM (sigcm.paSincronizarPadronSso).
     ///   3. Se preguntan las ternas vigentes de esa cuenta.
-    ///   4. Con una, se abre la sesion. Con varias, la elige el usuario.
+    ///   4. Con una, se abre la sesion. Con varias, se respeta el perfil que
+    ///      el usuario YA eligio en el portal SSO (cod_perfil / centro_costo
+    ///      del token). Solo si eso no alcanza se muestra el selector del SGCM.
     ///
     /// POR QUE SE SINCRONIZA EN CADA INGRESO Y NO POR UN PROCESO NOCTURNO
     /// Porque el padron son veinte filas y la corrida cuesta menos que la propia
@@ -51,9 +53,10 @@ namespace anin.scm.Services
         ///   { "estado":"ERROR",  "mensaje": "..." }
         ///
         /// El caso PERFIL existe porque el frontend consume detalle[0].perfil[0]:
-        /// una sesion lleva UNA terna. Si hay una sola terna de area usuaria, se
-        /// entra con esa (jefe o coordinador AU) y no se pregunta, igual que
-        /// Gustavo en OTI. El selector queda para quien tiene dos sombreros AU.
+        /// una sesion lleva UNA terna. Si el token del SSO ya trae el perfil
+        /// elegido (cod_perfil), se entra con esa terna. Si no, y solo hay una
+        /// terna de area usuaria, se entra con esa. El selector del SGCM queda
+        /// solo cuando el SSO no alcanza a desambiguar.
         /// </summary>
         public static string Ingresar(string strToken, string? strEquipo)
         {
@@ -83,7 +86,7 @@ namespace anin.scm.Services
                 // aqui no puede impedir el Anexo 3 de quien ya esta registrado.
             }
 
-            return ResolverSesion(strCuenta, strEquipo);
+            return ResolverSesion(strCuenta, strEquipo, strIdentidad, strToken);
         }
 
         /// <summary>
@@ -114,7 +117,7 @@ namespace anin.scm.Services
                     "El SSO valido el token externo pero no devolvio la cuenta del usuario."));
             }
 
-            return ResolverSesion(strCuenta, strEquipo);
+            return ResolverSesion(strCuenta, strEquipo, strIdentidad, strToken);
         }
 
         /// <summary>
@@ -260,7 +263,8 @@ namespace anin.scm.Services
         /// <summary>
         /// Cuantas ternas tiene la cuenta y que hacer con eso.
         /// </summary>
-        private static string ResolverSesion(string strCuenta, string? strEquipo)
+        private static string ResolverSesion(
+            string strCuenta, string? strEquipo, string? strIdentidad, string? strToken)
         {
             DaProceso _Daproceso = new DaProceso();
 
@@ -307,6 +311,15 @@ namespace anin.scm.Services
                             strEquipo);
                     }
 
+                    /* El portal SSO ya hizo elegir perfil. Si el token trae
+                       cod_perfil (y centro_costo cuando el mismo PE cubre dos
+                       unidades), se abre esa terna y no se vuelve a preguntar. */
+                    if (TryAbrirPorPerfilSso(strCuenta, strEquipo, strIdentidad, strToken, jePerfiles,
+                            out string strSesionSso))
+                    {
+                        return strSesionSso;
+                    }
+
                     /* Misma regla que el jefe de OTI: si solo hay una terna de
                        area usuaria, se entra con esa y no se pregunta. Evelyn
                        es coordinadora AU de OTI y ademas coordinadora de
@@ -344,6 +357,280 @@ namespace anin.scm.Services
             {
                 return Sobre("ERROR", JsonSerializer.Serialize(
                     "La rutina de perfiles devolvio una respuesta ilegible."));
+            }
+        }
+
+        /// <summary>
+        /// Abre la sesion con la terna que el SSO ya selecciono. Devuelve false
+        /// si el token no trae perfil, o si no hay una unica terna coincidente:
+        /// en ese caso el llamador sigue con las reglas de respaldo.
+        /// </summary>
+        private static bool TryAbrirPorPerfilSso(
+            string strCuenta,
+            string? strEquipo,
+            string? strIdentidad,
+            string? strToken,
+            JsonElement jePerfiles,
+            out string strSesion)
+        {
+            strSesion = string.Empty;
+
+            string? strCodPerfil = PrimeroNoVacio(
+                LeerCampoIdentidad(strIdentidad,
+                    "cod_perfil", "CodigoPerfil", "codigo_perfil", "CodPerfil"),
+                LeerCampoJwt(strToken,
+                    "cod_perfil", "CodigoPerfil", "codigo_perfil", "CodPerfil"));
+            if (string.IsNullOrWhiteSpace(strCodPerfil))
+            {
+                return false;
+            }
+
+            /* El sobre del SSO trae la dependencia elegida como
+               detalle[].dependencia[].cod_dependencia (D0001), no como
+               centro_costo. Sin filtrar por eso, PE071 coincide con OTI y UDS. */
+            string? strCodUnidad = PrimeroNoVacio(
+                LeerCampoIdentidad(strIdentidad,
+                    "cod_dependencia", "CodigoUnidad", "codigo_unidad", "CodDependencia"),
+                LeerCampoJwt(strToken,
+                    "cod_dependencia", "CodigoUnidad", "codigo_unidad", "CodDependencia"));
+
+            string? strCentro = PrimeroNoVacio(
+                LeerCampoIdentidad(strIdentidad,
+                    "centro_costo", "CentroCosto", "centroCosto", "cod_centro_costo"),
+                LeerCampoJwt(strToken,
+                    "centro_costo", "CentroCosto", "centroCosto", "cod_centro_costo"));
+
+            HashSet<string> hsCentros = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(strCentro))
+            {
+                foreach (string strParte in strCentro.Split(new[] { ';', ',' },
+                             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    hsCentros.Add(strParte);
+                }
+            }
+
+            List<JsonElement> lstCoinciden = new List<JsonElement>();
+
+            foreach (JsonElement jePerfil in jePerfiles.EnumerateArray())
+            {
+                if (!PerfilContieneCodigoSso(jePerfil, strCodPerfil))
+                {
+                    continue;
+                }
+
+                if (!CoincideUnidadOCentro(jePerfil, strCodUnidad, hsCentros))
+                {
+                    continue;
+                }
+
+                lstCoinciden.Add(jePerfil);
+            }
+
+            /* Si el CSV no alcanzo (SQL viejo o PE no listado en la fila),
+               se traduce el PE a CodigoRol y se filtra por eso + unidad/centro. */
+            if (lstCoinciden.Count == 0)
+            {
+                string? strCodigoRolTraducido = TraducirCodigoPerfilSso(strCodPerfil);
+
+                if (!string.IsNullOrWhiteSpace(strCodigoRolTraducido))
+                {
+                    foreach (JsonElement jePerfil in jePerfiles.EnumerateArray())
+                    {
+                        string strRol = jePerfil.TryGetProperty("CodigoRol", out JsonElement jeRol)
+                            ? (jeRol.GetString() ?? string.Empty)
+                            : string.Empty;
+
+                        if (!string.Equals(strRol, strCodigoRolTraducido, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (!CoincideUnidadOCentro(jePerfil, strCodUnidad, hsCentros))
+                        {
+                            continue;
+                        }
+
+                        lstCoinciden.Add(jePerfil);
+                    }
+                }
+            }
+
+            // Mismo PE en dos unidades y el token no trajo dependencia/centro:
+            // sin desambiguar no se inventa. El selector (o AREA_*) sigue.
+            if (lstCoinciden.Count != 1)
+            {
+                return false;
+            }
+
+            JsonElement jeElegido = lstCoinciden[0];
+            strSesion = AbrirSesion(strCuenta,
+                jeElegido.GetProperty("CodigoRol").GetString() ?? string.Empty,
+                jeElegido.GetProperty("CodigoUnidad").GetString() ?? string.Empty,
+                strEquipo);
+            return true;
+        }
+
+        /// <summary>
+        /// Si el SSO indico unidad o centro, la terna debe coincidir. Si no
+        /// indico ninguno, cualquier unidad del perfil sirve (queda el conteo).
+        /// </summary>
+        private static bool CoincideUnidadOCentro(
+            JsonElement jePerfil, string? strCodUnidad, HashSet<string> hsCentros)
+        {
+            bool bHayFiltro = !string.IsNullOrWhiteSpace(strCodUnidad) || hsCentros.Count > 0;
+            if (!bHayFiltro)
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(strCodUnidad))
+            {
+                string strUnidad = jePerfil.TryGetProperty("CodigoUnidad", out JsonElement jeUnidad)
+                    ? (jeUnidad.GetString() ?? string.Empty).Trim()
+                    : string.Empty;
+
+                if (string.Equals(strUnidad, strCodUnidad, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            if (hsCentros.Count > 0)
+            {
+                string strCcPerfil = jePerfil.TryGetProperty("CentroCosto", out JsonElement jeCc)
+                    ? (jeCc.GetString() ?? string.Empty).Trim()
+                    : string.Empty;
+
+                if (!string.IsNullOrEmpty(strCcPerfil) && hsCentros.Contains(strCcPerfil))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool PerfilContieneCodigoSso(JsonElement jePerfil, string strCodPerfil)
+        {
+            if (jePerfil.TryGetProperty("CodigosPerfilSso", out JsonElement jeCodigos)
+                && jeCodigos.ValueKind == JsonValueKind.String)
+            {
+                string? strCsv = jeCodigos.GetString();
+                if (!string.IsNullOrWhiteSpace(strCsv))
+                {
+                    foreach (string strParte in strCsv.Split(',',
+                                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (string.Equals(strParte, strCodPerfil, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // Respaldo si el SQL aun no desplego CodigosPerfilSso: el propio
+            // CodigoRol a veces llega igual que el PE (casos raros / externos).
+            if (jePerfil.TryGetProperty("CodigoRol", out JsonElement jeRol))
+            {
+                string? strRol = jeRol.GetString();
+                if (string.Equals(strRol, strCodPerfil, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string? PrimeroNoVacio(params string?[] arrValores)
+        {
+            foreach (string? strValor in arrValores)
+            {
+                if (!string.IsNullOrWhiteSpace(strValor))
+                {
+                    return strValor.Trim();
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Claims del JWT del portal (xy) sin validar firma: solo lectura de
+        /// payload. Si el token no es JWT, no aporta nada.
+        /// </summary>
+        private static string? LeerCampoJwt(string? strToken, params string[] arrCampos)
+        {
+            if (string.IsNullOrWhiteSpace(strToken) || arrCampos == null || arrCampos.Length == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                JwtSecurityTokenHandler jsthManejador = new JwtSecurityTokenHandler();
+                if (!jsthManejador.CanReadToken(strToken))
+                {
+                    return null;
+                }
+
+                JwtSecurityToken jwtToken = jsthManejador.ReadJwtToken(strToken);
+
+                foreach (string strCampo in arrCampos)
+                {
+                    Claim? clClaim = jwtToken.Claims.FirstOrDefault(c =>
+                        string.Equals(c.Type, strCampo, StringComparison.OrdinalIgnoreCase));
+
+                    if (clClaim != null && !string.IsNullOrWhiteSpace(clClaim.Value))
+                    {
+                        return clClaim.Value.Trim();
+                    }
+                }
+
+                // Payload como JSON por si el claim esta anidado.
+                if (jwtToken.Payload != null && jwtToken.Payload.Count > 0)
+                {
+                    string strPayload = JsonSerializer.Serialize(jwtToken.Payload);
+                    return LeerCampoIdentidad(strPayload, arrCampos);
+                }
+
+                return null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static string? TraducirCodigoPerfilSso(string strCodPerfil)
+        {
+            try
+            {
+                DaProceso _Daproceso = new DaProceso();
+                string strRespuesta = _Daproceso.ejecutarProceso(CONEXION, "sigcm.paTraducirPerfilSso",
+                    "{\"CodigoPerfilSso\":" + JsonSerializer.Serialize(strCodPerfil) + "}");
+
+                using (JsonDocument jd = JsonDocument.Parse(strRespuesta))
+                {
+                    JsonElement jeRaiz = jd.RootElement;
+                    bool bOk = jeRaiz.TryGetProperty("estado", out JsonElement jeEstado)
+                               && jeEstado.ValueKind == JsonValueKind.Number
+                               && jeEstado.GetInt32() == 1;
+
+                    if (!bOk || !jeRaiz.TryGetProperty("CodigoRol", out JsonElement jeRol))
+                    {
+                        return null;
+                    }
+
+                    string? strRol = jeRol.GetString();
+                    return string.IsNullOrWhiteSpace(strRol) ? null : strRol.Trim();
+                }
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 
@@ -462,6 +749,22 @@ namespace anin.scm.Services
         /// </summary>
         private static string? LeerCuenta(string strIdentidad)
         {
+            return LeerCampoIdentidad(strIdentidad,
+                "usuario", "Usuario", "dni", "Dni", "nro_documento");
+        }
+
+        /// <summary>
+        /// Un campo del sobre de identidad del SSO. Prueba varios nombres y
+        /// tambien la forma anidada detalle[0].perfil[0] / detalle[0] que
+        /// usaba el ingreso anterior (antes de armar la sesion local).
+        /// </summary>
+        private static string? LeerCampoIdentidad(string? strIdentidad, params string[] arrCampos)
+        {
+            if (string.IsNullOrWhiteSpace(strIdentidad) || arrCampos == null || arrCampos.Length == 0)
+            {
+                return null;
+            }
+
             try
             {
                 using (JsonDocument jdIdentidad = JsonDocument.Parse(strIdentidad))
@@ -473,21 +776,81 @@ namespace anin.scm.Services
                         return null;
                     }
 
-                    foreach (string strCampo in new[] { "usuario", "Usuario", "dni", "Dni", "nro_documento" })
+                    string? strDirecto = LeerCampoEnObjeto(jeRaiz, arrCampos);
+                    if (!string.IsNullOrWhiteSpace(strDirecto))
                     {
-                        if (jeRaiz.TryGetProperty(strCampo, out JsonElement jeValor))
-                        {
-                            string? strValor = jeValor.ValueKind switch
-                            {
-                                JsonValueKind.String => jeValor.GetString(),
-                                JsonValueKind.Number => jeValor.GetRawText(),
-                                _ => null
-                            };
+                        return strDirecto;
+                    }
 
-                            if (!string.IsNullOrWhiteSpace(strValor))
+                    // Forma historica del sobre SSO: detalle[].perfil[].cod_perfil
+                    if (jeRaiz.TryGetProperty("detalle", out JsonElement jeDetalle)
+                        || jeRaiz.TryGetProperty("Detalle", out jeDetalle))
+                    {
+                        JsonElement jePrimero = jeDetalle.ValueKind == JsonValueKind.Array
+                            && jeDetalle.GetArrayLength() > 0
+                            ? jeDetalle[0]
+                            : jeDetalle;
+
+                        if (jePrimero.ValueKind == JsonValueKind.Object)
+                        {
+                            string? strEnDetalle = LeerCampoEnObjeto(jePrimero, arrCampos);
+                            if (!string.IsNullOrWhiteSpace(strEnDetalle))
                             {
-                                return strValor.Trim();
+                                return strEnDetalle;
                             }
+
+                            if (jePrimero.TryGetProperty("perfil", out JsonElement jePerfil)
+                                || jePrimero.TryGetProperty("Perfil", out jePerfil))
+                            {
+                                JsonElement jePerfil0 = jePerfil.ValueKind == JsonValueKind.Array
+                                    && jePerfil.GetArrayLength() > 0
+                                    ? jePerfil[0]
+                                    : jePerfil;
+
+                                if (jePerfil0.ValueKind == JsonValueKind.Object)
+                                {
+                                    string? strEnPerfil = LeerCampoEnObjeto(jePerfil0, arrCampos);
+                                    if (!string.IsNullOrWhiteSpace(strEnPerfil))
+                                    {
+                                        return strEnPerfil;
+                                    }
+                                }
+                            }
+
+                            // detalle[].dependencia[].cod_dependencia / centro_costo
+                            if (jePrimero.TryGetProperty("dependencia", out JsonElement jeDep)
+                                || jePrimero.TryGetProperty("Dependencia", out jeDep))
+                            {
+                                JsonElement jeDep0 = jeDep.ValueKind == JsonValueKind.Array
+                                    && jeDep.GetArrayLength() > 0
+                                    ? jeDep[0]
+                                    : jeDep;
+
+                                if (jeDep0.ValueKind == JsonValueKind.Object)
+                                {
+                                    string? strEnDep = LeerCampoEnObjeto(jeDep0, arrCampos);
+                                    if (!string.IsNullOrWhiteSpace(strEnDep))
+                                    {
+                                        return strEnDep;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Por si validartoken envuelve la identidad en data / usuario.
+                    foreach (string strSobre in new[] { "data", "Data", "usuario", "Usuario", "mensaje", "Mensaje" })
+                    {
+                        if (!jeRaiz.TryGetProperty(strSobre, out JsonElement jeHijo)
+                            || jeHijo.ValueKind != JsonValueKind.Object)
+                        {
+                            continue;
+                        }
+
+                        string? strEnHijo = LeerCampoEnObjeto(jeHijo, arrCampos);
+                        if (!string.IsNullOrWhiteSpace(strEnHijo))
+                        {
+                            return strEnHijo;
                         }
                     }
 
@@ -498,6 +861,31 @@ namespace anin.scm.Services
             {
                 return null;
             }
+        }
+
+        private static string? LeerCampoEnObjeto(JsonElement jeObjeto, string[] arrCampos)
+        {
+            foreach (string strCampo in arrCampos)
+            {
+                if (!jeObjeto.TryGetProperty(strCampo, out JsonElement jeValor))
+                {
+                    continue;
+                }
+
+                string? strValor = jeValor.ValueKind switch
+                {
+                    JsonValueKind.String => jeValor.GetString(),
+                    JsonValueKind.Number => jeValor.GetRawText(),
+                    _ => null
+                };
+
+                if (!string.IsNullOrWhiteSpace(strValor))
+                {
+                    return strValor.Trim();
+                }
+            }
+
+            return null;
         }
 
         private static string Sobre(string strEstado, string strMensaje)

@@ -1,4 +1,4 @@
-﻿using anin.scm.Services;
+using anin.scm.Services;
 using anin.util;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,11 +17,11 @@ namespace anin.scm.Controllers
     /// del SSO NO TRAE ni el centro de costo ni el codigo de perfil: eso vive en
     /// su base, no en su token.
     ///
-    /// Ahora el ingreso pasa por SsoAccesoService, que valida el token igual que
-    /// antes, trae el padron de la base del SSO, lo reconcilia contra DBSIGCM y
-    /// arma la sesion con la MISMA rutina que usa el ingreso local. El sobre de
-    /// respuesta es el de siempre -{estado, mensaje}- con un tercer estado nuevo,
-    /// PERFIL, para cuando la persona ejerce mas de una terna y tiene que elegir.
+    /// El sobre del SSO no siempre trae centro de costo ni codigo de perfil en
+    /// forma plana: viven en su base y a veces en detalle/perfil del
+    /// validartoken. El ingreso valida el token, sincroniza el padron, y si el
+    /// token ya indica el perfil elegido abre esa sesion sin volver a preguntar.
+    /// El estado PERFIL queda solo cuando hace falta desambiguar.
     /// </summary>
     [AllowAnonymous]
     public class TokenController : ControllerBase
@@ -35,7 +35,8 @@ namespace anin.scm.Controllers
         }
 
         /// <summary>
-        /// Segundo tramo del ingreso, solo cuando tksistema respondio PERFIL.
+        /// Segundo tramo del ingreso, solo cuando tksistema respondio PERFIL
+        /// (el SSO no alcanzo a indicar un unico perfil usable).
         ///
         /// Entrada: strpretoken, el pase que devolvio tksistema, e ipInput con
         /// { "CodigoRol":"...", "CodigoUnidad":"..." }.
