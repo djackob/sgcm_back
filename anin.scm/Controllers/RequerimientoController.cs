@@ -45,6 +45,16 @@ namespace anin.scm.Controllers
         }
 
         /// <summary>
+        /// Unidades activas y el perfil que cada una ejerce. El Anexo 3 arma
+        /// con esto la ruta de informe tecnico / visto bueno del numeral 8.1.
+        /// </summary>
+        [HttpGet]
+        public IActionResult listarPerfilArea(string ipInput)
+        {
+            return EjecutarConActor("requerimiento.paListarPerfilArea", ipInput);
+        }
+
+        /// <summary>
         /// Requerimiento completo: cabecera, pedidos SIGA e items. Es lo que
         /// consume el visor y el formulario mientras esta editable (REQ-11).
         ///
@@ -110,6 +120,20 @@ namespace anin.scm.Controllers
         public IActionResult registrarCcp(string ipInput)
         {
             return EjecutarConActor("requerimiento.paRegistrarCcp", ipInput);
+        }
+
+        /// <summary>
+        /// Estado de la CCP en el SIAF web, leído de la respuesta que SIGA ya
+        /// tiene (SIG_CERTIFICACION). La letra A de la grilla es Aprobado.
+        ///
+        /// Entrada: { "NumeroCcp":"05619", "AnoEje":2026 }
+        /// NumeroCcp es el CERTIFICADO N.° del SIAF, no el certificado SIGA.
+        /// AnoEje es opcional: sin él se toma el año más reciente.
+        /// </summary>
+        [HttpGet]
+        public IActionResult consultarEstadoCcp(string ipInput)
+        {
+            return EjecutarConActor("requerimiento.paConsultarEstadoCcp", ipInput);
         }
 
         [HttpPost]

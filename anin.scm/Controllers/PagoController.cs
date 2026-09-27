@@ -63,6 +63,12 @@ namespace anin.scm.Controllers
         }
 
         [HttpPost]
+        public IActionResult otorgarVistoBueno(string ipInput)
+        {
+            return EjecutarConActor("pago.paOtorgarVistoBueno", ipInput);
+        }
+
+        [HttpPost]
         public IActionResult aprobarConformidadTecnica(string ipInput)
         {
             return EjecutarConActor("pago.paAprobarConformidadTecnica", ipInput);
