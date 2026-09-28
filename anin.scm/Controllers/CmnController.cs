@@ -222,6 +222,7 @@ namespace anin.scm.Controllers
             string strEnvio;
             try
             {
+                strCopia = AmpliarCopiaInstitucional(ipInput, strPara, strCopia);
                 strEnvio = UT_Correo.envioCorreo("de", strPara, strAsunto, strCuerpo, strCopia, adjuntos);
             }
             catch (Exception ex)
@@ -245,6 +246,9 @@ namespace anin.scm.Controllers
             bool blEnviado = (jnEnvio?["estado"]?.GetValue<int>() ?? 0) == 1;
             string strMsgCorreo = jnEnvio?["mensaje"]?.GetValue<string>()
                 ?? (blEnviado ? "Envio de correo satisfactorio" : "No se pudo enviar el correo.");
+
+            RegistrarCorreo("cmn.notificarAnexo4", ipInput, strPara, strCopia, strAsunto, strCuerpo,
+                adjuntos, blEnviado, strMsgCorreo);
 
             JsonObject joMarca;
             try

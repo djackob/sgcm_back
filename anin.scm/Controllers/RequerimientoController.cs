@@ -209,6 +209,7 @@ namespace anin.scm.Controllers
                 /* Sin adjuntos: el sobre igual se intenta enviar. */
             }
 
+            strCopia = AmpliarCopiaInstitucional(ipInput, strPara, strCopia);
             string strEnvio = UT_Correo.envioCorreo("de", strPara, strAsunto, strCuerpo, strCopia, adjuntos);
 
             JsonNode? jnEnvio;
@@ -224,6 +225,9 @@ namespace anin.scm.Controllers
             bool blEnviado = (jnEnvio?["estado"]?.GetValue<int>() ?? 0) == 1;
             string strMsgCorreo = jnEnvio?["mensaje"]?.GetValue<string>()
                 ?? (blEnviado ? "Envio de correo satisfactorio" : "No se pudo enviar el correo.");
+
+            RegistrarCorreo("requerimiento.invitacionCotizacionLocador", ipInput, strPara, strCopia,
+                strAsunto, strCuerpo, adjuntos, blEnviado, strMsgCorreo);
 
             JsonObject joMarca;
             try
@@ -334,6 +338,7 @@ namespace anin.scm.Controllers
             string strAsunto = jnSobre?["Asunto"]?.GetValue<string>() ?? string.Empty;
             string strCuerpo = jnSobre?["Cuerpo"]?.GetValue<string>() ?? string.Empty;
 
+            strCopia = AmpliarCopiaInstitucional(ipInput, strPara, strCopia);
             string strEnvio = UT_Correo.envioCorreo("de", strPara, strAsunto, strCuerpo, strCopia);
 
             JsonNode? jnEnvio;
@@ -345,6 +350,11 @@ namespace anin.scm.Controllers
             {
                 jnEnvio = JsonNode.Parse("{\"estado\":0,\"mensaje\":\"El envio de correo no devolvio JSON.\"}");
             }
+
+            RegistrarCorreo("requerimiento.notificarOrdenServicio", ipInput, strPara, strCopia,
+                strAsunto, strCuerpo, null,
+                (jnEnvio?["estado"]?.GetValue<int>() ?? 0) == 1,
+                jnEnvio?["mensaje"]?.GetValue<string>());
 
             if ((jnEnvio?["estado"]?.GetValue<int>() ?? 0) != 1)
             {

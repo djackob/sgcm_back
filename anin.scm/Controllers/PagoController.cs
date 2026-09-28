@@ -109,5 +109,84 @@ namespace anin.scm.Controllers
         {
             return EjecutarConActor("pago.paRegistrarProrroga", ipInput);
         }
+
+        /// <summary>
+        /// El jefe o la secretaria del area asignan el entregable recibido a un
+        /// especialista. Entrada: { IdExpediente, Version, IdResponsableDestino }.
+        /// </summary>
+        [HttpPost]
+        public IActionResult asignarEspecialista(string ipInput)
+        {
+            return EjecutarConActor("pago.paAsignarEspecialista", ipInput);
+        }
+
+        /// <summary>
+        /// Abastecimiento notifica al proveedor la observacion del area usuaria.
+        /// </summary>
+        [HttpPost]
+        public IActionResult notificarObservacion(string ipInput)
+        {
+            return EjecutarConActor("pago.paNotificarObservacion", ipInput);
+        }
+
+        [HttpPost]
+        public IActionResult actualizarNumeroContrato(string ipInput)
+        {
+            return EjecutarConActor("pago.paActualizarNumeroContrato", ipInput);
+        }
+
+        [HttpPost]
+        public IActionResult registrarDocumentoAdicional(string ipInput)
+        {
+            return EjecutarConActor("pago.paRegistrarDocumentoAdicional", ipInput);
+        }
+
+        [HttpPost]
+        public IActionResult anularDocumentoAdicional(string ipInput)
+        {
+            return EjecutarConActor("pago.paAnularDocumentoAdicional", ipInput);
+        }
+
+        /// <summary>Campanita y tablero de alertas del modulo.</summary>
+        [HttpGet]
+        public IActionResult resumenAlertas(string ipInput)
+        {
+            return EjecutarConActor("pago.paResumenAlertas", ipInput);
+        }
+
+        /// <summary>
+        /// Correos enviados del expediente y de su requerimiento. Con IdCorreo
+        /// devuelve el cuerpo para reconstruirlo como evidencia.
+        /// </summary>
+        [HttpGet]
+        public IActionResult listarCorreo(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paListarCorreo", ipInput);
+        }
+
+        /// <summary>
+        /// Constancia de prestacion de la orden. Con Emitir=true la crea cuando
+        /// todos los entregables estan pagados; sin el, solo informa.
+        /// Entrada: { "IdExpediente":"...", "Emitir":true }
+        /// </summary>
+        [HttpPost]
+        public IActionResult emitirConstancia(string ipInput)
+        {
+            return EjecutarConActor("pago.paEmitirConstancia", ipInput);
+        }
+
+        /// <summary>Guarda el PDF generado de la constancia.</summary>
+        [HttpPost]
+        public IActionResult registrarConstanciaDocumento(string ipInput)
+        {
+            return EjecutarConActor("pago.paRegistrarConstanciaDocumento", ipInput);
+        }
+
+        /// <summary>Envia la constancia al proveedor con el PDF adjunto.</summary>
+        [HttpPost]
+        public IActionResult notificarConstancia(string ipInput)
+        {
+            return NotificarPorCorreo("pago.paPrepararNotificacionConstancia", "pago.paMarcarConstanciaNotificada", ipInput);
+        }
     }
 }
