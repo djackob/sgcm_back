@@ -108,6 +108,16 @@ namespace anin.scm.Controllers
             return EjecutarConActor("sigcm.paObtenerTrazabilidad", ipInput);
         }
 
+        /// <summary>
+        /// Campana de la cabecera: lo que le toca al actor y los plazos vencidos
+        /// o por vencer (7 dias) de todos los modulos, con su desglose.
+        /// </summary>
+        [HttpGet]
+        public IActionResult resumenAlertas(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paResumenAlertas", ipInput);
+        }
+
         #endregion
 
         #region "Accesos y perfiles"

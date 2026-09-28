@@ -120,6 +120,7 @@ namespace anin.scm.Controllers
             string? strAdjunto = jnSobre?["AdjuntoDocumento"]?.GetValue<string>();
             string? strNombreAdjunto = jnSobre?["NombreAdjunto"]?.GetValue<string>();
             string strCarpeta = jnSobre?["Carpeta"]?.GetValue<string>() ?? "sigcm";
+            strCopia = AmpliarCopiaInstitucional(strIpInput, strPara, strCopia);
 
             List<AdjuntoCorreo> adjuntos = new List<AdjuntoCorreo>();
             if (!string.IsNullOrWhiteSpace(strAdjunto)
@@ -157,6 +158,9 @@ namespace anin.scm.Controllers
             bool blEnviado = (jnEnvio?["estado"]?.GetValue<int>() ?? 0) == 1;
             string strMsgCorreo = jnEnvio?["mensaje"]?.GetValue<string>()
                 ?? (blEnviado ? "Envio de correo satisfactorio" : "No se pudo enviar el correo.");
+
+            RegistrarCorreo(strRutinaPreparar, strIpInput, strPara, strCopia, strAsunto, strCuerpo,
+                adjuntos, blEnviado, strMsgCorreo);
 
             JsonObject joMarca;
             try
@@ -204,6 +208,81 @@ namespace anin.scm.Controllers
             catch (JsonException)
             {
                 return Ok(JsonDocument.Parse("{\"estado\":1,\"mensaje\":\"Se registro el aviso.\"}"));
+            }
+        }
+
+        /// <summary>
+        /// Agrega a la copia del sobre al especialista que envia, al jefe del
+        /// area usuaria y al punto focal (sigcm.paResolverCopiaCorreo). Si la
+        /// rutina falla se conserva la copia original: no se bloquea el envio.
+        /// </summary>
+        protected string? AmpliarCopiaInstitucional(string? strIpInput, string strPara, string? strCopia)
+        {
+            try
+            {
+                JsonObject joEntrada = LeerObjeto(strIpInput);
+                joEntrada["Destinatario"] = strPara;
+                joEntrada["Copia"] = strCopia;
+
+                JsonNode? jnCopia = JsonNode.Parse(
+                    EjecutarPayloadConActor("sigcm.paResolverCopiaCorreo", joEntrada.ToJsonString()));
+                if ((jnCopia?["estado"]?.GetValue<int>() ?? 0) == 1)
+                {
+                    string? strNueva = jnCopia?["Copia"]?.GetValue<string>();
+                    return string.IsNullOrWhiteSpace(strNueva) ? strCopia : strNueva;
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            return strCopia;
+        }
+
+        /// <summary>
+        /// Guarda el correo en sigcm.CorreoEnviado como evidencia, se haya
+        /// enviado o no. Un fallo al registrar no afecta la respuesta.
+        /// </summary>
+        protected void RegistrarCorreo(string strOrigen, string? strIpInput, string strPara, string? strCopia,
+            string strAsunto, string strCuerpo, IEnumerable<AdjuntoCorreo>? adjuntos,
+            bool blEnviado, string? strResultado)
+        {
+            try
+            {
+                JsonObject joCorreo = LeerObjeto(strIpInput);
+                joCorreo["Origen"] = strOrigen;
+                joCorreo["Destinatario"] = strPara;
+                joCorreo["Copia"] = strCopia;
+                joCorreo["Asunto"] = strAsunto;
+                joCorreo["Cuerpo"] = strCuerpo;
+                joCorreo["Enviado"] = blEnviado;
+                joCorreo["Resultado"] = strResultado;
+
+                JsonArray jaAdjuntos = new JsonArray();
+                foreach (AdjuntoCorreo adjunto in adjuntos ?? Enumerable.Empty<AdjuntoCorreo>())
+                {
+                    jaAdjuntos.Add(new JsonObject { ["Nombre"] = adjunto.Nombre });
+                }
+                joCorreo["Adjuntos"] = jaAdjuntos;
+
+                EjecutarPayloadConActor("sigcm.paRegistrarCorreo", joCorreo.ToJsonString());
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private static JsonObject LeerObjeto(string? strJson)
+        {
+            try
+            {
+                return string.IsNullOrWhiteSpace(strJson)
+                    ? new JsonObject()
+                    : JsonNode.Parse(strJson) as JsonObject ?? new JsonObject();
+            }
+            catch (JsonException)
+            {
+                return new JsonObject();
             }
         }
 
