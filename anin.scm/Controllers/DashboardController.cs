@@ -21,5 +21,16 @@ namespace anin.scm.Controllers
         {
             return EjecutarConActor("sigcm.paDashboardEspecialistas", ipInput);
         }
+
+        /// <summary>
+        /// Expedientes en atencion (especialista, tipo, estado de atencion, area
+        /// usuaria, inactividad) y ordenes vigentes.
+        /// Entrada: { "CodigoTipoContratacion":null }
+        /// </summary>
+        [HttpGet]
+        public IActionResult atencionExpedientes(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paDashboardAtencion", ipInput);
+        }
     }
 }
