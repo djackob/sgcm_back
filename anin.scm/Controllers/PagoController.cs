@@ -68,6 +68,36 @@ namespace anin.scm.Controllers
             return EjecutarConActor("pago.paOtorgarVistoBueno", ipInput);
         }
 
+        /// <summary>
+        /// Filas del 8.1 del Anexo 3 con las personas que ejercen cada perfil,
+        /// para derivar el visto bueno previo a la firma del Acta.
+        /// </summary>
+        [HttpGet]
+        public IActionResult listarCandidatoVistoBueno(string ipInput)
+        {
+            return EjecutarConActor("pago.paListarCandidatoVistoBueno", ipInput);
+        }
+
+        /// <summary>
+        /// El jefe o la secretaria AU derivan el acta por firmar a una persona por
+        /// fila del 8.1. Entrada: { IdExpediente, Version, Destinatarios:[{Orden, IdUsuario}] }.
+        /// </summary>
+        [HttpPost]
+        public IActionResult derivarVistoBuenoFirma(string ipInput)
+        {
+            return EjecutarConActor("pago.paDerivarVistoBuenoFirma", ipInput);
+        }
+
+        /// <summary>
+        /// La persona del paso pendiente otorga u observa.
+        /// Entrada: { IdExpediente, Version, Respuesta, Comentario, GeneradoDocumento, NombreDocumento }.
+        /// </summary>
+        [HttpPost]
+        public IActionResult responderVistoBuenoFirma(string ipInput)
+        {
+            return EjecutarConActor("pago.paResponderVistoBuenoFirma", ipInput);
+        }
+
         [HttpPost]
         public IActionResult aprobarConformidadTecnica(string ipInput)
         {

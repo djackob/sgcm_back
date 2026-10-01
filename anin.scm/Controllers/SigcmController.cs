@@ -118,6 +118,17 @@ namespace anin.scm.Controllers
             return EjecutarConActor("sigcm.paResumenAlertas", ipInput);
         }
 
+        /// <summary>
+        /// El actor abrio una alerta de la campana: deja de contar como nueva
+        /// hasta que el expediente vuelva a moverse.
+        /// Entrada: { "IdExpediente":"...", "Tipo":"VENCIDO|POR_VENCER|PENDIENTE" }
+        /// </summary>
+        [HttpPost]
+        public IActionResult marcarAlertaVista(string ipInput)
+        {
+            return EjecutarConActor("sigcm.paMarcarAlertaVista", ipInput);
+        }
+
         #endregion
 
         #region "Accesos y perfiles"
